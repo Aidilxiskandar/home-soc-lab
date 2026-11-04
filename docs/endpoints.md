@@ -1,8 +1,14 @@
 # Endpoints: victim VM and Wazuh agents
 
-> **Status: DRAFT plan, not yet run.** Steps marked **(verify)** are expected to work but need to be confirmed on the real machine. Update this guide with what actually happened.
+> **Status:** steps 1–5.2 were run on 2026-11-04 (soc-victim-01 enrolled, Active, group config synced). Steps from 5.3 on are still a plan; steps marked **(verify)** need confirming on the real machine.
 
 How to build the lab's victim machine and connect both endpoints to Wazuh.
+
+**Where to type each command.** Every code block starts with a comment saying where it runs:
+- `# [Mac]`: Terminal on the Mac.
+- `# [VM]`: on soc-victim-01. Best over SSH from Mac Terminal (`ssh <admin>@<VM IP>`), because pasting into the UTM console window is unreliable. Use the UTM console only before SSH works, or when a step says so.
+
+Commands are kept short, one per line, so they don't break when copied.
 
 | Endpoint | What | Wazuh agent name | Wazuh group |
 |---|---|---|---|
@@ -27,6 +33,7 @@ Prerequisite: the Wazuh stack from [`setup.md`](setup.md) is running (`docker co
 - The VM reaches the Mac at the **gateway address of UTM's shared network**, normally `192.168.64.1` (macOS creates it on interface `bridge100` while a VM is running).
 - Docker Desktop publishes ports 1514/1515 on all Mac interfaces, so the manager is reachable at `192.168.64.1:1514` from the VM and at `127.0.0.1:1514` from the Mac itself.
 - Shared Network is NAT: the VM can reach the internet (for `apt`), but devices on the Wi-Fi cannot reach the VM. Don't add UTM port forwards.
+- **The manager doesn't see real agent IPs.** Docker Desktop NATs incoming connections, so the manager sees every agent coming from `192.168.65.1` and lists the agent IP as `any`. Identify endpoints by **agent name** (`agent.name`), not IP. (Source IPs *inside* log lines, such as the attacker IP in an sshd failure, are unaffected.)
 
 ## Resource budget
 
@@ -41,12 +48,14 @@ Prerequisite: the Wazuh stack from [`setup.md`](setup.md) is running (`docker co
 ## 1. Install UTM and get the Ubuntu ISO
 
 ```bash
+# [Mac]
 brew install --cask utm
 ```
 
 Download **Ubuntu Server 24.04 LTS for ARM** (`ubuntu-24.04.x-live-server-arm64.iso`) from <https://ubuntu.com/download/server/arm>. Check its SHA-256 against the `SHA256SUMS` file on the same release page:
 
 ```bash
+# [Mac]
 shasum -a 256 ~/Downloads/ubuntu-24.04.*-live-server-arm64.iso
 ```
 
@@ -76,9 +85,10 @@ Start the VM and go through the installer:
 
 When it finishes, shut down, then in UTM **clear the CD/DVD drive** (remove the ISO) and boot again.
 
-Then update and set the time zone:
+Then update and set the time zone. The admin account should already be able to log in over SSH (Ubuntu allows password login by default), so from here on you can work from Mac Terminal: `ssh <admin>@<VM IP>` (the IP is shown on the VM's login screen, or run `ip -4 addr` in the console).
 
 ```bash
+# [VM]
 sudo apt update && sudo apt full-upgrade -y
 sudo timedatectl set-timezone Asia/Kuala_Lumpur
 sudo reboot
@@ -88,18 +98,18 @@ sudo reboot
 
 ## 4. Check the VM can reach the manager
 
-On the VM:
-
 ```bash
+# [VM]
 ip -4 addr show                      # the VM's own 192.168.64.x address
 ip route | grep default              # "default via 192.168.64.1": this is the Mac
 nc -vz 192.168.64.1 1515             # enrolment port: "succeeded"
 nc -vz 192.168.64.1 1514             # event port: "succeeded"
 ```
 
-On the Mac (while the VM is running), confirm the same address from the other side:
+Then confirm the same address from the Mac side (while the VM is running):
 
 ```bash
+# [Mac]
 ifconfig bridge100 | grep 'inet '    # expect: inet 192.168.64.1
 ```
 
@@ -112,6 +122,7 @@ If the gateway is not `192.168.64.1`, use whatever `ip route` shows in every ste
 ### 5.1 Prerequisites for the group config
 
 ```bash
+# [VM]
 sudo apt install -y auditd rsyslog       # auditd for FIM who-data; rsyslog is usually already there
 sudo systemctl enable --now auditd rsyslog
 ls -l /var/log/auth.log /var/log/syslog  # both must exist
@@ -121,20 +132,48 @@ ls -l /var/log/auth.log /var/log/syslog  # both must exist
 
 The agent version must not be newer than the manager (4.14.9).
 
-Enrolment needs the **registration password** set on the manager : the `WAZUH_REGISTRATION_PASSWORD` value in the git-ignored `configs/wazuh/.env` on the Mac (`setup.sh` generates it). Copy it from there and never paste it into a file in this repo; `read -s` keeps it out of the screen and shell history.
+Enrolment needs the **registration password**: the `WAZUH_REGISTRATION_PASSWORD` value in the git-ignored `configs/wazuh/.env` on the Mac (`setup.sh` generates it). Never paste it into a file in this repo.
+
+**a) Copy the password to the Mac clipboard** without showing it. This runs on the **Mac**, not the VM (`pbcopy` doesn't exist on Ubuntu):
 
 ```bash
+# [Mac], from the repo root
+grep '^WAZUH_REGISTRATION_PASSWORD=' configs/wazuh/.env | cut -d= -f2- | pbcopy
+```
+
+**b) Download the agent** with a short file name:
+
+```bash
+# [VM]
 cd /tmp
-wget https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14.9-1_arm64.deb
+wget -O agent.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14.9-1_arm64.deb
+```
 
-read -rs -p 'Wazuh registration password: ' REGPASS; echo
-sudo WAZUH_MANAGER='192.168.64.1' \
-     WAZUH_AGENT_NAME='soc-victim-01' \
-     WAZUH_AGENT_GROUP='linux-victims' \
-     WAZUH_REGISTRATION_PASSWORD="$REGPASS" \
-     dpkg -i ./wazuh-agent_4.14.9-1_arm64.deb
-unset REGPASS
+**c) Set the enrolment values, one line each.** At the password prompt, paste with Cmd+V (nothing is shown, and it stays out of shell history):
 
+```bash
+# [VM]
+export WAZUH_MANAGER='192.168.64.1'
+export WAZUH_AGENT_NAME='soc-victim-01'
+export WAZUH_AGENT_GROUP='linux-victims'
+read -rs -p 'Registration password: ' WAZUH_REGISTRATION_PASSWORD; echo
+export WAZUH_REGISTRATION_PASSWORD
+```
+
+**d) Install,** passing those values through `sudo` with `-E`, then clear the password from the shell:
+
+```bash
+# [VM]
+sudo -E dpkg -i ./agent.deb
+unset WAZUH_REGISTRATION_PASSWORD
+```
+
+If the package was already installed once without these values, just run c) and d) again. Reinstalling over it enrols fine (seen on the first build).
+
+**e) Start it and pin the version:**
+
+```bash
+# [VM]
 sudo systemctl daemon-reload
 sudo systemctl enable --now wazuh-agent
 sudo apt-mark hold wazuh-agent           # stop apt upgrading it past the manager
@@ -143,6 +182,7 @@ sudo apt-mark hold wazuh-agent           # stop apt upgrading it past the manage
 Check it connected:
 
 ```bash
+# [VM]
 sudo grep -iE 'connected|error|warn' /var/ossec/logs/ossec.log | tail -20
 sudo /var/ossec/bin/wazuh-control status
 ```
@@ -152,6 +192,7 @@ sudo /var/ossec/bin/wazuh-control status
 After a few minutes the agent pulls `agent.conf` from the manager and restarts:
 
 ```bash
+# [VM]
 sudo ls -l /var/ossec/etc/shared/agent.conf        # present = group config received
 sudo auditctl -l | grep wazuh_fim                  # who-data audit rules loaded
 sudo grep -i whodata /var/ossec/logs/ossec.log | tail
@@ -164,6 +205,7 @@ If `auditctl` shows no `wazuh_fim` rules, who-data isn't active and the agent ha
 Recent Wazuh agents may also read the systemd journal by default. If so, every sshd/sudo line could arrive twice (once from `/var/log/auth.log`, once from journald):
 
 ```bash
+# [VM]
 sudo grep -n -B2 -A3 journald /var/ossec/etc/ossec.conf
 ```
 
@@ -180,31 +222,54 @@ Simulation 01 (ssh-brute-force, T1110.001) needs an account that accepts passwor
 >
 > Never copy `10-lab-password-auth.conf` to a real machine. Never add a UTM port forward to port 22.
 
-```bash
-# Unprivileged test user (no sudo group)
-sudo adduser labuser          # pick a password that IS in a common wordlist but used nowhere else
+**a) Create the test user** (no sudo rights). Pick a password that *is* in a common wordlist but is used nowhere else:
 
-# Lab SSH settings
-sudo cp 10-lab-password-auth.conf /etc/ssh/sshd_config.d/   # file from configs/endpoint/
-sudo sshd -t                                                 # syntax check, no output = OK
+```bash
+# [VM]
+sudo adduser labuser
+```
+
+**b) Copy the SSH drop-in to the VM.** It lives in this repo, not on the VM:
+
+```bash
+# [Mac], from the repo root
+scp configs/endpoint/10-lab-password-auth.conf <admin>@<VM IP>:/tmp/
+```
+
+**c) Install it and restart SSH.** Keep this SSH session open until step d) passes. Restarting sshd doesn't drop sessions that are already open, so this window is your way back in:
+
+```bash
+# [VM]
+sudo cp /tmp/10-lab-password-auth.conf /etc/ssh/sshd_config.d/
+sudo sshd -t
 sudo systemctl restart ssh
-sudo sshd -T | grep -Ei 'passwordauthentication|permitrootlogin|maxauthtries'
+sudo sshd -T | grep -Ei 'passwordauth|permitroot|maxauthtries'
 ```
 
-Expected: `passwordauthentication yes`, `permitrootlogin no` and `maxauthtries 6`.
+`sshd -t` prints nothing if the syntax is OK. Expected from the last line: `passwordauthentication yes`, `permitrootlogin no` and `maxauthtries 6`.
 
-**Lockout check:** do these SSH steps in the UTM console window, not over SSH, and keep that window open. Then, from the Mac, confirm both accounts can log in before you close it:
+**d) Lockout check:** open a **second** Mac Terminal window and confirm both accounts can log in:
 
 ```bash
-ssh <admin>@<VM IP>      # must work
-ssh labuser@<VM IP>      # must work
+# [Mac], new window
+ssh <admin>@<VM IP>
+ssh labuser@<VM IP>
 ```
 
-If the admin login fails, remove the drop-in from the console (`sudo rm /etc/ssh/sshd_config.d/10-lab-password-auth.conf && sudo systemctl restart ssh`) and check `sudo sshd -T` again.
-
-Optional extra layer: allow SSH only from the lab subnet with the host firewall:
+If the admin login fails, undo it from the session you kept open, then check `sudo sshd -T` again:
 
 ```bash
+# [VM], the session from step c)
+sudo rm /etc/ssh/sshd_config.d/10-lab-password-auth.conf
+sudo systemctl restart ssh
+```
+
+(If no session is left, the UTM console window always works.)
+
+Optional extra layer: allow SSH only from the lab subnet with the host firewall. The Mac is `192.168.64.1`, inside that range, so your session survives:
+
+```bash
+# [VM]
 sudo ufw allow from 192.168.64.0/24 to any port 22 proto tcp
 sudo ufw enable
 ```
@@ -213,18 +278,36 @@ sudo ufw enable
 
 ## 7. Install the Wazuh agent on the Mac (mac-host)
 
-On the Mac, the manager is reached through Docker's published port on localhost.
+Everything in this step runs on the **Mac**. The manager is reached through Docker's published port on localhost. The installer reads its settings from `/tmp/wazuh_envs`, so the steps below build that file a line at a time, then delete it.
+
+**a) Download the agent:**
 
 ```bash
+# [Mac]
 cd /tmp
-curl -LO https://packages.wazuh.com/4.x/macos/wazuh-agent-4.14.9-1.arm64.pkg
+curl -L -o agent.pkg https://packages.wazuh.com/4.x/macos/wazuh-agent-4.14.9-1.arm64.pkg
+```
 
-read -rs -p 'Wazuh registration password: ' REGPASS; echo
-( umask 077
-  echo "WAZUH_MANAGER='127.0.0.1' && WAZUH_AGENT_NAME='mac-host' && WAZUH_REGISTRATION_PASSWORD='$REGPASS'" > /tmp/wazuh_envs )
-unset REGPASS
-sudo installer -pkg ./wazuh-agent-4.14.9-1.arm64.pkg -target /
-rm -f /tmp/wazuh_envs                      # don't leave the password lying around
+**b) Write the settings file.** Copy the password to the clipboard first (step 5.2 a), then paste it at the prompt:
+
+```bash
+# [Mac]
+read -rs 'P?Registration password: '; echo
+E="WAZUH_MANAGER='127.0.0.1'"
+E="$E && WAZUH_AGENT_NAME='mac-host'"
+E="$E && WAZUH_REGISTRATION_PASSWORD='$P'"
+(umask 077; echo "$E" > /tmp/wazuh_envs)
+unset P E
+```
+
+(`read 'P?…'` is zsh, the Mac's default shell.)
+
+**c) Install, delete the settings file, start:**
+
+```bash
+# [Mac]
+sudo installer -pkg ./agent.pkg -target /
+rm -f /tmp/wazuh_envs
 sudo /Library/Ossec/bin/wazuh-control start
 sudo /Library/Ossec/bin/wazuh-control status
 ```
@@ -240,7 +323,7 @@ Open <https://localhost> and work through this list. Take a screenshot of each f
 
 | # | Check | Where | How to trigger | Expected |
 |---|---|---|---|---|
-| 1 | Both agents active | **Agents** (Endpoints summary) | – | `soc-victim-01` and `mac-host` show **Active**, version 4.14.9 |
+| 1 | Both agents active | **Agents** (Endpoints summary) | – | `soc-victim-01` and `mac-host` show **Active**, version 4.14.9. IP shows `any`: expected, see Network layout |
 | 2 | Victim is in the right group | Agent `soc-victim-01` → details | – | Group `linux-victims`, config **synced** |
 | 3 | auth.log arriving | **Threat Hunting → Events**, filter `agent.name: soc-victim-01` and `location: /var/log/auth.log` | From the Mac: `ssh labuser@<VM IP>` with a wrong password, once | sshd authentication-failure alert (rule group `authentication_failed`) |
 | 4 | syslog arriving | Same, `location: /var/log/syslog` | On the VM: `logger "soc-lab test"` | Event visible in archives / a syslog alert if a rule matches. If nothing shows, that's normal: Wazuh only stores events that match a rule unless `logall` is on. Use check 3 instead as proof. |
