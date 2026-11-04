@@ -29,6 +29,14 @@ docker compose up -d
 
 The first start downloads about 3 GB of images. Wait 1–3 minutes for the indexer to initialise.
 
+## 2b. Apply manager settings
+
+```bash
+./apply-manager-config.sh
+```
+
+This turns on the **agent enrolment password** (`WAZUH_REGISTRATION_PASSWORD` in `.env`) and loads the `linux-victims` agent group from `configs/endpoint/agent.conf`. Rerun it after editing `config/wazuh_cluster/wazuh_manager.conf`, or after `docker compose down -v`. The image only copies the mounted `ossec.conf` on the container's first start, so a plain restart doesn't pick up edits.
+
 ## 3. Log in
 
 Open <https://localhost> and accept the self-signed certificate warning.
@@ -44,6 +52,7 @@ Open <https://localhost> and accept the self-signed certificate warning.
 | Demo indexer users removed | `kibanaro`, `logstash`, `readall`, `snapshotrestore` ship with public passwords |
 | Dashboard (443), indexer (9200) and API (55000) bound to `127.0.0.1` | Only this Mac can reach them, not other devices on the same Wi-Fi |
 | Agent ports 1514/1515 open on all interfaces | Lab VMs need to reach the manager to send logs |
+| Enrolment password required on 1515 | Without it, any device on the same Wi-Fi could register a fake agent. Tested: no password → `ERROR: Invalid password` |
 | Syslog 514/udp removed | Not needed yet; fewer open ports |
 | `restart: unless-stopped` | Stays stopped after `docker compose stop` instead of restarting with Docker Desktop |
 

@@ -40,12 +40,18 @@ else
   echo "[setup] using existing .env"
 fi
 
+# Agent enrolment password (added later, so append it to older .env files too).
+if ! grep -q '^WAZUH_REGISTRATION_PASSWORD=' .env; then
+  echo "[setup] adding WAZUH_REGISTRATION_PASSWORD to .env"
+  echo "WAZUH_REGISTRATION_PASSWORD=$(random_password)" >> .env
+fi
+
 set -a
 # shellcheck disable=SC1091
 source .env
 set +a
 
-for var in INDEXER_ADMIN_PASSWORD KIBANASERVER_PASSWORD WAZUH_API_PASSWORD; do
+for var in INDEXER_ADMIN_PASSWORD KIBANASERVER_PASSWORD WAZUH_API_PASSWORD WAZUH_REGISTRATION_PASSWORD; do
   if [[ -z "${!var:-}" || "${!var}" == "change-me" ]]; then
     echo "[setup] ERROR: $var is not set in .env" >&2
     exit 1
@@ -84,3 +90,4 @@ if [[ ! -f "$CERTS_DIR/root-ca-manager.pem" ]]; then
 fi
 
 echo "[setup] done. Start the stack with: docker compose up -d"
+echo "[setup] then run: ./apply-manager-config.sh"
