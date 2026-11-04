@@ -107,7 +107,7 @@ If the gateway is not `192.168.64.1`, use whatever `ip route` shows in every ste
 
 ## 5. Install the Wazuh agent on soc-victim-01
 
-> **Manager first:** the `linux-victims` group must exist on the manager before this step, or enrolment fails. See [`configs/endpoint/README.md`](../configs/endpoint/README.md) → Manager-side steps.
+> **Manager first:** run `./configs/wazuh/apply-manager-config.sh` on the Mac before this step. It sets the enrolment password and creates the `linux-victims` group. Without it, enrolment fails. See [`configs/endpoint/README.md`](../configs/endpoint/README.md) → Manager-side steps.
 
 ### 5.1 Prerequisites for the group config
 
@@ -121,7 +121,7 @@ ls -l /var/log/auth.log /var/log/syslog  # both must exist
 
 The agent version must not be newer than the manager (4.14.9).
 
-Enrolment needs the **registration password** set on the manager (kept in the git-ignored `configs/wazuh/.env` on the Mac; see the wazuh branch's `setup.md` for the variable name). Copy it from there; `read -s` keeps it out of the screen and shell history.
+Enrolment needs the **registration password** set on the manager : the `WAZUH_REGISTRATION_PASSWORD` value in the git-ignored `configs/wazuh/.env` on the Mac (`setup.sh` generates it). Copy it from there and never paste it into a file in this repo; `read -s` keeps it out of the screen and shell history.
 
 ```bash
 cd /tmp

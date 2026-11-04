@@ -15,20 +15,20 @@ Config for the lab's victim endpoints. The full build guide is [`docs/endpoints.
 
 ## Manager-side steps (for the wazuh branch)
 
-Run from `configs/wazuh/` on the Mac, with the stack up. Nothing here needs a restart of the manager.
+One script on the wazuh side does it all: `configs/wazuh/apply-manager-config.sh`. With the stack up, run it from the repo:
 
 ```bash
-# 1. Create the group
-docker compose exec wazuh.manager /var/ossec/bin/agent_groups -a -g linux-victims -q
-
-# 2. Copy the group config in and fix ownership
-docker compose cp ../endpoint/agent.conf wazuh.manager:/var/ossec/etc/shared/linux-victims/agent.conf
-docker compose exec wazuh.manager chown wazuh:wazuh /var/ossec/etc/shared/linux-victims/agent.conf
-
-# 3. Validate the XML
-docker compose exec wazuh.manager /var/ossec/bin/verify-agent-conf \
-  -f /var/ossec/etc/shared/linux-victims/agent.conf
+./configs/wazuh/apply-manager-config.sh                      # uses ../endpoint/agent.conf (this file, on main)
+./configs/wazuh/apply-manager-config.sh path/to/agent.conf   # or point it at another copy
 ```
+
+It:
+1. syncs the manager's `ossec.conf` (the image only copies the mounted file on the container's first start)
+2. writes the enrolment password from `.env` (`WAZUH_REGISTRATION_PASSWORD`) to `/var/ossec/etc/authd.pass`
+3. creates the `linux-victims` group if it's missing, copies in `agent.conf` and runs `verify-agent-conf`
+4. restarts the manager
+
+**Rerun it after you edit `agent.conf`, and after any `docker compose down -v`.** The group lives in the `wazuh_etc` volume, so `down -v` deletes it.
 
 The agent joins the group at enrolment (`WAZUH_AGENT_GROUP=linux-victims`, see `docs/endpoints.md`). If it was enrolled without a group:
 
@@ -41,9 +41,6 @@ Agents pull a changed `agent.conf` within a few minutes and restart themselves. 
 ```bash
 docker compose exec wazuh.manager /var/ossec/bin/agent_groups -S -i <AGENT_ID>   # "synchronized"
 ```
-
-The file sits in the `wazuh_etc` Docker volume, so it survives `docker compose stop/start` but **not** `docker compose down -v`. After a full reset, repeat steps 1–3. (The wazuh branch could make this automatic, for example with a step in `setup.sh` or a bind mount. That's its call.)
-
 ## Not needed on the manager
 
 - **No new rules for Phase 1.** Built-in rules already cover what this config sends: sshd failures (5710, 5716, 5760, 5763), sudo (5401–5403), new user/group (5902, 5901), FIM changes (550, 553, 554). Confirm these IDs against real alerts in Phase 2. Custom rules come with Phase 2 under `detections/`.
