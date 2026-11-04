@@ -4,15 +4,15 @@ Paced for about 4–5 hours a week. Each phase ends with something finished and 
 
 ## Phase 0: Plan and set up (Nov 2026)
 - [x] Create repo, roadmap and architecture plan
-- [ ] Record the first design decisions as ADRs
-- [ ] Give Docker Desktop enough memory for Wazuh (about 8 GB)
+- [x] Record the first design decisions as ADRs
+- [x] Give Docker Desktop enough memory for Wazuh (about 8 GB)
 
 ## Phase 1: Build the SIEM (Nov–Dec 2026)
-- [ ] Deploy Wazuh single-node with Docker Compose
+- [x] Deploy Wazuh single-node with Docker Compose (4 Nov 2026)
 - [ ] Set up an Ubuntu Linux VM as the first victim endpoint
 - [ ] Enrol agents on the Ubuntu VM and the macOS host
 - [ ] Confirm logs arrive (auth logs, syslog, file integrity events)
-- [ ] Write the setup guide: `docs/setup.md`
+- [x] Write the setup guide: [`docs/setup.md`](setup.md)
 - **Deliverable:** working dashboard screenshot + setup guide anyone can follow
 
 ## Phase 2: Attack and detect (Jan–Feb 2027)

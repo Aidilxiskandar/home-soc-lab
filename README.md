@@ -2,7 +2,7 @@
 
 A self-built Security Operations Centre (SOC) lab running on a single laptop. I use it to practise the full blue-team loop: **collect logs → simulate attacks → detect → triage → report**.
 
-> Status: 🚧 Phase 0 — planning and setup. See the [roadmap](docs/roadmap.md).
+> Status: 🚧 Phase 1: Wazuh SIEM deployed ([setup guide](docs/setup.md)); onboarding endpoints next. See the [roadmap](docs/roadmap.md).
 
 ## Why this project
 

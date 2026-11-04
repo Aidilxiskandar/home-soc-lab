@@ -1,0 +1,22 @@
+# Wazuh indexer internal users (template).
+# setup.sh copies this to internal_users.yml (git-ignored) and replaces the
+# placeholders with bcrypt hashes of the passwords in .env.
+#
+# Upstream ships extra demo users (kibanaro, logstash, readall, snapshotrestore)
+# with publicly known passwords. They are removed here on purpose.
+
+_meta:
+  type: "internalusers"
+  config_version: 2
+
+admin:
+  hash: "__ADMIN_HASH__"
+  reserved: true
+  backend_roles:
+  - "admin"
+  description: "Indexer admin user"
+
+kibanaserver:
+  hash: "__KIBANASERVER_HASH__"
+  reserved: true
+  description: "Dashboard service user"
