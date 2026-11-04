@@ -55,7 +55,7 @@ shasum -a 256 ~/Downloads/ubuntu-24.04.*-live-server-arm64.iso
 1. **Create a New Virtual Machine → Virtualize → Linux.** (Never "Emulate": the CPU is ARM, so virtualisation is native and fast.)
 2. Leave **Use Apple Virtualization** unticked (QEMU backend). Boot ISO image: the ISO from step 1.
 3. Hardware: **2 CPU cores, 2048 MB memory**.
-4. Storage: **20 GB**.
+4. Storage: **20 GB** or more (the first build used ~30 GB; either is fine).
 5. Shared directory: none.
 6. Name: **`soc-victim-01`**. Before saving, tick **Open VM settings**.
 7. In settings → **Network**: Network Mode = **Shared Network**. Save.
@@ -69,7 +69,7 @@ Start the VM and go through the installer:
 | Installation type | Ubuntu Server (not minimized) |
 | Network | Accept DHCP (you should see a `192.168.64.x` address) |
 | Storage | Use entire disk (default LVM is fine) |
-| Profile | Server name **`soc-victim-01`**. Username **`socadmin`** (your admin account, with sudo). Use a strong, unique password. |
+| Profile | Server name **`soc-victim-01`**. Username: your own admin account (with sudo), e.g. your usual login name. This guide calls it `<admin>`. Use a strong, unique password. |
 | Ubuntu Pro | Skip |
 | SSH | Tick **Install OpenSSH server**. Leave "Import SSH identity" off. |
 | Featured snaps | None |
@@ -188,10 +188,19 @@ sudo adduser labuser          # pick a password that IS in a common wordlist but
 sudo cp 10-lab-password-auth.conf /etc/ssh/sshd_config.d/   # file from configs/endpoint/
 sudo sshd -t                                                 # syntax check, no output = OK
 sudo systemctl restart ssh
-sudo sshd -T | grep -Ei 'passwordauthentication|permitrootlogin|maxauthtries|allowusers'
+sudo sshd -T | grep -Ei 'passwordauthentication|permitrootlogin|maxauthtries'
 ```
 
-Expected: `passwordauthentication yes`, `permitrootlogin no`, `maxauthtries 6`, `allowusers labuser` and `allowusers socadmin`.
+Expected: `passwordauthentication yes`, `permitrootlogin no` and `maxauthtries 6`.
+
+**Lockout check:** do these SSH steps in the UTM console window, not over SSH, and keep that window open. Then, from the Mac, confirm both accounts can log in before you close it:
+
+```bash
+ssh <admin>@<VM IP>      # must work
+ssh labuser@<VM IP>      # must work
+```
+
+If the admin login fails, remove the drop-in from the console (`sudo rm /etc/ssh/sshd_config.d/10-lab-password-auth.conf && sudo systemctl restart ssh`) and check `sudo sshd -T` again.
 
 Optional extra layer: allow SSH only from the lab subnet with the host firewall:
 
@@ -235,9 +244,9 @@ Open <https://localhost> and work through this list. Take a screenshot of each f
 | 2 | Victim is in the right group | Agent `soc-victim-01` → details | – | Group `linux-victims`, config **synced** |
 | 3 | auth.log arriving | **Threat Hunting → Events**, filter `agent.name: soc-victim-01` and `location: /var/log/auth.log` | From the Mac: `ssh labuser@<VM IP>` with a wrong password, once | sshd authentication-failure alert (rule group `authentication_failed`) |
 | 4 | syslog arriving | Same, `location: /var/log/syslog` | On the VM: `logger "soc-lab test"` | Event visible in archives / a syslog alert if a rule matches. If nothing shows, that's normal: Wazuh only stores events that match a rule unless `logall` is on. Use check 3 instead as proof. |
-| 5 | sudo logged | Events, `agent.name: soc-victim-01` | On the VM: `sudo ls` as `socadmin` | sudo alert (rule group `sudo`) |
+| 5 | sudo logged | Events, `agent.name: soc-victim-01` | On the VM: `sudo ls` as `<admin>` | sudo alert (rule group `sudo`) |
 | 6 | FIM on and baseline done | **File Integrity Monitoring** → `soc-victim-01` | Wait for first scan after enrolment | Inventory lists files under `/etc` and `/var/spool/cron` |
-| 7 | FIM realtime/who-data | **File Integrity Monitoring → Events** | On the VM: `sudo touch /etc/cron.d/soc-lab-test` then `sudo rm /etc/cron.d/soc-lab-test` | "File added" then "File deleted" within seconds; `syscheck.audit.login_user.name` = `socadmin` if who-data works |
+| 7 | FIM realtime/who-data | **File Integrity Monitoring → Events** | On the VM: `sudo touch /etc/cron.d/soc-lab-test` then `sudo rm /etc/cron.d/soc-lab-test` | "File added" then "File deleted" within seconds; `syscheck.audit.login_user.name` = `<admin>` if who-data works |
 | 8 | No duplicates | Events for check 3 | – | One alert per failed login, not two (see 5.4) |
 | 9 | Mac agent sending | Events, `agent.name: mac-host` | – | Any events (rootcheck, SCA or logs) |
 
@@ -254,7 +263,7 @@ When all nine pass, tick "Enrol agents" and "Confirm logs arrive" in the roadmap
 ## Decisions (2026-11-04)
 
 1. **Enrolment password: on.** Port 1515 is reachable from the Wi-Fi, so without a password any nearby device could enrol a fake agent while the lab runs. The manager uses `use_password yes`; the password lives only in the git-ignored `.env` (manager change made on the wazuh branch). Rejected: binding the ports to `192.168.64.1` only, because `bridge100` exists only while a UTM VM runs and Docker may fail to start.
-2. **VM admin account: `socadmin`**, separate from the unprivileged test user `labuser`.
+2. **VM admin account:** the personal admin account created at install (written `<admin>` here, so no personal names go in the repo), separate from the unprivileged test user `labuser`. The SSH drop-in has no `AllowUsers` line, so it cannot lock the admin out.
 3. **Duplicate logs:** if step 5.4 / check 8 shows sshd or sudo events twice, keep one source (journald or `/var/log/auth.log`) and record which here.
 
 ## Still to confirm when run
