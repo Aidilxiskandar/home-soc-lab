@@ -349,7 +349,7 @@ When all nine pass, tick "Enrol agents" and "Confirm logs arrive" in the roadmap
 
 1. **Enrolment password: on.** Port 1515 is reachable from the Wi-Fi, so without a password any nearby device could enrol a fake agent while the lab runs. The manager uses `use_password yes`; the password lives only in the git-ignored `.env` (manager change made on the wazuh branch). Rejected: binding the ports to `192.168.64.1` only, because `bridge100` exists only while a UTM VM runs and Docker may fail to start.
 2. **VM admin account:** the personal admin account created at install (written `<admin>` here, so no personal names go in the repo), separate from the unprivileged test user `labuser`. The SSH drop-in has no `AllowUsers` line, so it cannot lock the admin out.
-3. **Log source: journald.** Step 5.4 found every auth event twice (15 from `/var/log/auth.log`, 19 from journald, same events at the same second). Kept journald, the agent default, so nothing is edited on the VM and it's all central config. Removed the `auth.log` and `syslog` inputs from `agent.conf`, and kept `audit.log`. Built-in rules decode journald events the same way (5402, 5501, 5502 seen).
+3. **Log source: journald.** Step 5.4 found every auth event twice (15 from `/var/log/auth.log`, 19 from journald, same events at the same second). Kept journald, the agent default, so nothing is edited on the VM and it's all central config. Removed the `auth.log` and `syslog` inputs from `agent.conf`, and kept `audit.log`. Built-in rules decode journald events the same way (5402, 5501, 5502 seen, `data.command` filled in). Verified after applying: from 07:08:58 each sudo command gives exactly one 5402 alert (location journald); before that, every one was paired.
 
 ## Still to confirm when run
 
