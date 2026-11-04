@@ -4,7 +4,7 @@ Config for the lab's victim endpoints. The full build guide is [`docs/endpoints.
 
 | File | Goes to | Purpose |
 |---|---|---|
-| [`agent.conf`](agent.conf) | **Manager:** `/var/ossec/etc/shared/linux-victims/agent.conf` | Group config for Linux victims: auth log + syslog collection, FIM with who-data on `/etc`, account, sudo and cron files |
+| [`agent.conf`](agent.conf) | **Manager:** `/var/ossec/etc/shared/linux-victims/agent.conf` | Group config for Linux victims: audit.log collection (auth events come from the default journald input), FIM with who-data on `/etc`, account, sudo and cron files |
 | [`10-lab-password-auth.conf`](10-lab-password-auth.conf) | **Victim:** `/etc/ssh/sshd_config.d/` | Lab-only SSH password login for the T1110.001 simulation |
 
 ## Why a group config instead of editing the agent's ossec.conf

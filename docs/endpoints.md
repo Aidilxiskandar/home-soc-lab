@@ -1,6 +1,6 @@
 # Endpoints: victim VM and Wazuh agents
 
-> **Status:** steps 1–5.2 were run on 2026-11-04 (soc-victim-01 enrolled, Active, group config synced). Steps from 5.3 on are still a plan; steps marked **(verify)** need confirming on the real machine.
+> **Status:** steps 1–5.4 were run on 2026-11-04 (soc-victim-01 enrolled, Active, group config synced, who-data engine started, log source set to journald). Steps from 6 on are still a plan; steps marked **(verify)** need confirming on the real machine.
 
 How to build the lab's victim machine and connect both endpoints to Wazuh.
 
@@ -123,9 +123,9 @@ If the gateway is not `192.168.64.1`, use whatever `ip route` shows in every ste
 
 ```bash
 # [VM]
-sudo apt install -y auditd rsyslog       # auditd for FIM who-data; rsyslog is usually already there
-sudo systemctl enable --now auditd rsyslog
-ls -l /var/log/auth.log /var/log/syslog  # both must exist
+sudo apt install -y auditd               # for FIM who-data and audit.log
+sudo systemctl enable --now auditd
+sudo journalctl -n 5 --no-pager          # journal works (the agent reads auth events from it)
 ```
 
 ### 5.2 Install agent 4.14.9 (arm64)
@@ -200,16 +200,18 @@ sudo grep -i whodata /var/ossec/logs/ossec.log | tail
 
 If `auditctl` shows no `wazuh_fim` rules, who-data isn't active and the agent has fallen back to realtime monitoring. Alerts still arrive, but without the "who changed it" fields. Check the `ossec.log` lines for the reason.
 
-### 5.4 Duplicate log check (verify)
+### 5.4 One log source only (done on the first build)
 
-Recent Wazuh agents may also read the systemd journal by default. If so, every sshd/sudo line could arrive twice (once from `/var/log/auth.log`, once from journald):
+The agent's **default** `ossec.conf` already reads the systemd journal (`<log_format>journald</log_format>`), and that's where Ubuntu 24.04 sends sshd, sudo and PAM messages. On the first build the group config also read `/var/log/auth.log`, so every event arrived twice, once from each source in the same second. The group config now reads only `audit.log`, and auth events come from journald.
+
+To confirm there's no duplication after a rebuild:
 
 ```bash
 # [VM]
-sudo grep -n -B2 -A3 journald /var/ossec/etc/ossec.conf
+sudo grep -n -A2 journald /var/ossec/etc/ossec.conf
 ```
 
-If there is a journald `<localfile>` block, compare alert counts in step 8. If they double, decide with the wazuh branch which source to keep (open question below).
+Expect one journald `<localfile>` block, and no `auth.log` entry in `/var/ossec/etc/shared/agent.conf`. In the dashboard, one `sudo ls` gives **one** rule 5402 alert with `location: journald`.
 
 ## 6. Lab user and SSH password login (lab only)
 
@@ -325,8 +327,8 @@ Open <https://localhost> and work through this list. Take a screenshot of each f
 |---|---|---|---|---|
 | 1 | Both agents active | **Agents** (Endpoints summary) | – | `soc-victim-01` and `mac-host` show **Active**, version 4.14.9. IP shows `any`: expected, see Network layout |
 | 2 | Victim is in the right group | Agent `soc-victim-01` → details | – | Group `linux-victims`, config **synced** |
-| 3 | auth.log arriving | **Threat Hunting → Events**, filter `agent.name: soc-victim-01` and `location: /var/log/auth.log` | From the Mac: `ssh labuser@<VM IP>` with a wrong password, once | sshd authentication-failure alert (rule group `authentication_failed`) |
-| 4 | syslog arriving | Same, `location: /var/log/syslog` | On the VM: `logger "soc-lab test"` | Event visible in archives / a syslog alert if a rule matches. If nothing shows, that's normal: Wazuh only stores events that match a rule unless `logall` is on. Use check 3 instead as proof. |
+| 3 | Auth events arriving | **Threat Hunting → Events**, filter `agent.name: soc-victim-01` and `location: journald` | From the Mac: `ssh labuser@<VM IP>` with a wrong password, once | sshd authentication-failure alert (rule group `authentication_failed`) |
+| 4 | Other system logs arriving | Same, `location: journald` | On the VM: `logger "soc-lab test"` | Event visible in archives / a syslog alert if a rule matches. If nothing shows, that's normal: Wazuh only stores events that match a rule unless `logall` is on. Use check 3 instead as proof. |
 | 5 | sudo logged | Events, `agent.name: soc-victim-01` | On the VM: `sudo ls` as `<admin>` | sudo alert (rule group `sudo`) |
 | 6 | FIM on and baseline done | **File Integrity Monitoring** → `soc-victim-01` | Wait for first scan after enrolment | Inventory lists files under `/etc` and `/var/spool/cron` |
 | 7 | FIM realtime/who-data | **File Integrity Monitoring → Events** | On the VM: `sudo touch /etc/cron.d/soc-lab-test` then `sudo rm /etc/cron.d/soc-lab-test` | "File added" then "File deleted" within seconds; `syscheck.audit.login_user.name` = `<admin>` if who-data works |
@@ -347,8 +349,8 @@ When all nine pass, tick "Enrol agents" and "Confirm logs arrive" in the roadmap
 
 1. **Enrolment password: on.** Port 1515 is reachable from the Wi-Fi, so without a password any nearby device could enrol a fake agent while the lab runs. The manager uses `use_password yes`; the password lives only in the git-ignored `.env` (manager change made on the wazuh branch). Rejected: binding the ports to `192.168.64.1` only, because `bridge100` exists only while a UTM VM runs and Docker may fail to start.
 2. **VM admin account:** the personal admin account created at install (written `<admin>` here, so no personal names go in the repo), separate from the unprivileged test user `labuser`. The SSH drop-in has no `AllowUsers` line, so it cannot lock the admin out.
-3. **Duplicate logs:** if step 5.4 / check 8 shows sshd or sudo events twice, keep one source (journald or `/var/log/auth.log`) and record which here.
+3. **Log source: journald.** Step 5.4 found every auth event twice (15 from `/var/log/auth.log`, 19 from journald, same events at the same second). Kept journald, the agent default, so nothing is edited on the VM and it's all central config. Removed the `auth.log` and `syslog` inputs from `agent.conf`, and kept `audit.log`. Built-in rules decode journald events the same way (5402, 5501, 5502 seen).
 
 ## Still to confirm when run
 
-- **Ubuntu 24.04 timestamps.** 24.04's rsyslog writes ISO-8601 timestamps (`2026-11-04T10:00:00.123456+08:00`). Wazuh 4.14 should decode them; confirm in check 3 that sshd fields (`srcip`, `dstuser`) are filled in.
+- **sshd fields from journald (Phase 2).** Confirm in check 3 that sshd failure alerts from journald carry `srcip` and `dstuser` (rules 5710/5760). If they don't, switch back: add `/var/log/auth.log` to `agent.conf` and remove the journald block from the VM's local `ossec.conf`.
