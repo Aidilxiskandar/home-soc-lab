@@ -1,0 +1,25 @@
+# Secrets and credentials: never commit
+.env
+*.env
+*.pem
+*.key
+*.crt
+secrets/
+configs/**/certs/
+*password*
+*credentials*
+
+# Raw lab data (may contain hostnames, IPs, usernames)
+*.log
+logs/
+exports/
+*.pcap
+*.evtx
+
+# Local Claude Code config
+.claude/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
