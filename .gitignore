@@ -23,3 +23,7 @@ exports/
 .DS_Store
 .vscode/
 .idea/
+
+# Wazuh: generated locally by configs/wazuh/setup.sh
+configs/wazuh/config/wazuh_indexer_ssl_certs/
+configs/wazuh/config/wazuh_indexer/internal_users.yml
