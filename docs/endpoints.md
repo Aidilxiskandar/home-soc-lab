@@ -1,6 +1,6 @@
 # Endpoints: victim VM and Wazuh agents
 
-> **Status (Phase 1 complete, 2026-11-05):** steps 1–6 were run on soc-victim-01: enrolled, Active, group config synced, log source journald, who-data on, lab SSH set up, clean clone `soc-victim-01-clean` kept. Dashboard check 7 (FIM who-data) passed: `/etc/cron.d/soc-lab-test` gave rule 554 (added) then 553 (deleted), mode whodata, with the admin as login user. **Step 7 (mac-host) is deferred and optional.** Steps still marked **(verify)** haven't been run yet.
+> **Status (Phase 1 complete, 2026-11-05):** steps 1–6 were run on soc-victim-01: enrolled, Active, group config synced, log source journald, who-data on, lab SSH set up, clean clone `soc-victim-01-clean` kept. Dashboard check 7 (FIM who-data) passed: `/etc/cron.d/soc-lab-test` gave rule 554 (added) then 553 (deleted), mode whodata, with the admin as login user. **Step 7 (mac-host) is deferred and optional.** Steps still marked **(verify)** haven't been run yet. Open items for Phase 2 are under "Still to confirm" at the end.
 
 How to build the lab's victim machine and connect both endpoints to Wazuh.
 
@@ -355,4 +355,6 @@ When checks 1–8 pass (9 only if mac-host is installed), tick "Enrol agents" an
 
 ## Still to confirm when run
 
-- **sshd fields from journald (Phase 2).** Confirm in check 3 that sshd failure alerts from journald carry `srcip` and `dstuser` (rules 5710/5760). If they don't, switch back: add `/var/log/auth.log` to `agent.conf` and remove the journald block from the VM's local `ossec.conf`.
+- **sshd fields from journald (Phase 2).** Confirm in check 3 that sshd failure alerts from journald carry `srcip` and `dstuser` (rules 5710/5760). If they don't, switch back: add `/var/log/auth.log` to `agent.conf` and remove the journald block from the VM's local `ossec.conf`. Partly answered: successful admin logins from journald already arrive as rule 5715 with `srcip` 192.168.64.1; failures not yet tested.
+- **No 5715 for labuser's SSH login.** On the first build, logging in as `labuser` gave only 5502 (session closed), while admin logins gave 5715 (authentication success). Before simulation 01, log in once as `labuser` and look at the raw journald event to see whether the sshd "Accepted password" line arrives and which rule (if any) it matches. A brute force that *succeeds* needs this success alert to be detected.
+- **`MaxAuthTries`.** Set to 6 in the drop-in (also sshd's default), but not re-checked with `sshd -T` after a typo in the grep. The simulation 01 run will confirm it (at most 6 failures per connection).
