@@ -1,6 +1,6 @@
 # Endpoints: victim VM and Wazuh agents
 
-> **Status:** steps 1–5.4 were run on 2026-11-04 (soc-victim-01 enrolled, Active, group config synced, who-data engine started, log source set to journald). Steps from 6 on are still a plan; steps marked **(verify)** need confirming on the real machine.
+> **Status (Phase 1 complete, 2026-11-05):** steps 1–6 were run on soc-victim-01: enrolled, Active, group config synced, log source journald, who-data on, lab SSH set up, clean clone `soc-victim-01-clean` kept. Dashboard check 7 (FIM who-data) passed: `/etc/cron.d/soc-lab-test` gave rule 554 (added) then 553 (deleted), mode whodata, with the admin as login user. **Step 7 (mac-host) is deferred and optional.** Steps still marked **(verify)** haven't been run yet.
 
 How to build the lab's victim machine and connect both endpoints to Wazuh.
 
@@ -278,7 +278,9 @@ sudo ufw enable
 
 (Simulation 05 sudo-abuse will need `labuser` to try `sudo` and fail. That is set up in `simulations/`, not here.)
 
-## 7. Install the Wazuh agent on the Mac (mac-host)
+## 7. Install the Wazuh agent on the Mac (mac-host): optional, deferred
+
+> Not done in Phase 1. Phase 2 detections all target soc-victim-01. Do this step when host coverage is wanted.
 
 Everything in this step runs on the **Mac**. The manager is reached through Docker's published port on localhost. The installer reads its settings from `/tmp/wazuh_envs`, so the steps below build that file a line at a time, then delete it.
 
@@ -335,7 +337,7 @@ Open <https://localhost> and work through this list. Take a screenshot of each f
 | 8 | No duplicates | Events for check 3 | – | One alert per failed login, not two (see 5.4) |
 | 9 | Mac agent sending | Events, `agent.name: mac-host` | – | Any events (rootcheck, SCA or logs) |
 
-When all nine pass, tick "Enrol agents" and "Confirm logs arrive" in the roadmap (coordinator updates the roadmap on `main`).
+When checks 1–8 pass (9 only if mac-host is installed), tick "Enrol agents" and "Confirm logs arrive" in the roadmap (coordinator updates the roadmap on `main`).
 
 ## Undo / reset
 
