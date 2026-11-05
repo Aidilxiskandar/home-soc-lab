@@ -26,4 +26,4 @@ Wazuh single-node needs roughly 4–8 GB RAM. Plan: 8 GB for Docker, about 2–3
 
 ## Open questions
 - ~~Do the Wazuh Docker images run natively on ARM64?~~ Yes: 4.14.9 ships `arm64` images. See [ADR 0002](adr/0002-run-wazuh-natively-in-docker.md).
-- VM tool: UTM (free) or another hypervisor
+- ~~VM tool?~~ UTM (free), QEMU backend, Shared Network. See [docs/endpoints.md](endpoints.md).

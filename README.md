@@ -2,7 +2,7 @@
 
 A self-built Security Operations Centre (SOC) lab running on a single laptop. I use it to practise the full blue-team loop: **collect logs → simulate attacks → detect → triage → report**.
 
-> Status: 🚧 Phase 1: Wazuh SIEM deployed ([setup guide](docs/setup.md)); onboarding endpoints next. See the [roadmap](docs/roadmap.md).
+> Status: ✅ Phase 1 complete: SIEM deployed and the first endpoint is sending logs. Next: Phase 2, attack and detect. See the [roadmap](docs/roadmap.md).
 
 ## Why this project
 
@@ -10,7 +10,19 @@ I'm a cybersecurity graduate focusing on security operations and governance, ris
 
 It also asks a practical question: **what should a small business (like a cafe) actually monitor, and what would it cost?**
 
-## Lab architecture (planned)
+## Dashboard
+
+![Wazuh dashboard showing the soc-victim-01 agent](assets/dashboard-soc-victim-01.png)
+
+## Phase 1 highlights
+
+- **Hardened the official Wazuh setup.** It ships with hard-coded default passwords, demo users with public passwords, and services on every network interface. Fixed all three and verified: defaults now return HTTP 401 ([ADR 0002](docs/adr/0002-run-wazuh-natively-in-docker.md)).
+- **Closed a rogue-agent gap.** Agent enrolment was open to any device on the network. It now needs a password, and an attempt without one is rejected.
+- **Found and fixed duplicate alerts.** Every login and sudo event arrived twice (from `/var/log/auth.log` and from journald), which would have inflated brute-force counts. Now each event is ingested from journald only, and verified as one alert per event.
+- **File integrity with who-data.** Changes to `/etc`, sudoers and cron are attributed to the user who made them. `/etc/shadow` changes alert without sending password hashes to the SIEM.
+- **CIS benchmark out of the box.** The first scan of the Ubuntu VM scored 46% on the CIS Ubuntu 24.04 benchmark, a baseline to harden later.
+
+## Lab architecture
 
 ```
 ┌──────────────────────── MacBook (Apple Silicon, 16 GB) ────────────────────────┐

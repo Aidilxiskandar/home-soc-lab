@@ -9,11 +9,12 @@ Paced for about 4–5 hours a week. Each phase ends with something finished and 
 
 ## Phase 1: Build the SIEM (Nov–Dec 2026)
 - [x] Deploy Wazuh single-node with Docker Compose (4 Nov 2026)
-- [ ] Set up an Ubuntu Linux VM as the first victim endpoint
-- [ ] Enrol agents on the Ubuntu VM and the macOS host
-- [ ] Confirm logs arrive (auth logs, syslog, file integrity events)
+- [x] Set up an Ubuntu Linux VM as the first victim endpoint (`soc-victim-01`, Ubuntu 24.04.5 ARM in UTM). Guide: [`docs/endpoints.md`](endpoints.md)
+- [x] Enrol the agent on the Ubuntu VM (password-protected enrolment, group `linux-victims`)
+- [ ] Enrol the macOS host agent (optional, deferred)
+- [x] Confirm logs arrive: auth/sudo via journald (duplicates from auth.log removed), file integrity with who-data, CIS benchmark scan (5 Nov 2026)
 - [x] Write the setup guide: [`docs/setup.md`](setup.md)
-- **Deliverable:** working dashboard screenshot + setup guide anyone can follow
+- **Deliverable:** working dashboard screenshot + setup guide anyone can follow ✅
 
 ## Phase 2: Attack and detect (Jan–Feb 2027)
 Five simulations, each mapped to MITRE ATT&CK, with a detection and evidence:
