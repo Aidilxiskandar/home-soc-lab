@@ -1,6 +1,6 @@
 # Endpoints: victim VM and Wazuh agents
 
-> **Status (Phase 1 complete, 2026-11-05):** steps 1–6 were run on soc-victim-01: enrolled, Active, group config synced, log source journald, who-data on, lab SSH set up, clean clone `soc-victim-01-clean` kept. Dashboard check 7 (FIM who-data) passed: `/etc/cron.d/soc-lab-test` gave rule 554 (added) then 553 (deleted), mode whodata, with the admin as login user. **Step 7 (mac-host) is deferred and optional.** Steps still marked **(verify)** haven't been run yet. Open items for Phase 2 are under "Still to confirm" at the end.
+> **Status (Phase 1 complete, 2026-11-05):** steps 1–6 were run on soc-victim-01: enrolled, Active, group config synced, log source journald, who-data on, lab SSH set up, clean clone `soc-victim-01-clean` kept. Dashboard check 7 (FIM who-data) passed: `/etc/cron.d/soc-lab-test` gave rule 554 (added) then 553 (deleted), mode whodata, with the admin as login user. **Step 7 (mac-host) is deferred and optional.** Steps still marked **(verify)** haven't been run yet. Phase 2 pre-check results are under "Phase 2 pre-checks" at the end.
 
 How to build the lab's victim machine and connect both endpoints to Wazuh.
 
@@ -353,8 +353,29 @@ When checks 1–8 pass (9 only if mac-host is installed), tick "Enrol agents" an
 2. **VM admin account:** the personal admin account created at install (written `<admin>` here, so no personal names go in the repo), separate from the unprivileged test user `labuser`. The SSH drop-in has no `AllowUsers` line, so it cannot lock the admin out.
 3. **Log source: journald.** Step 5.4 found every auth event twice (15 from `/var/log/auth.log`, 19 from journald, same events at the same second). Kept journald, the agent default, so nothing is edited on the VM and it's all central config. Removed the `auth.log` and `syslog` inputs from `agent.conf`, and kept `audit.log`. Built-in rules decode journald events the same way (5402, 5501, 5502 seen, `data.command` filled in). Verified after applying: from 07:08:58 each sudo command gives exactly one 5402 alert (location journald); before that, every one was paired.
 
-## Still to confirm when run
+## Phase 2 pre-checks (2026-11-06)
 
-- **sshd fields from journald (Phase 2).** Confirm in check 3 that sshd failure alerts from journald carry `srcip` and `dstuser` (rules 5710/5760). If they don't, switch back: add `/var/log/auth.log` to `agent.conf` and remove the journald block from the VM's local `ossec.conf`. Partly answered: successful admin logins from journald already arrive as rule 5715 with `srcip` 192.168.64.1; failures not yet tested.
-- **No 5715 for labuser's SSH login.** On the first build, logging in as `labuser` gave only 5502 (session closed), while admin logins gave 5715 (authentication success). Before simulation 01, log in once as `labuser` and look at the raw journald event to see whether the sshd "Accepted password" line arrives and which rule (if any) it matches. A brute force that *succeeds* needs this success alert to be detected.
-- **`MaxAuthTries`.** Set to 6 in the drop-in (also sshd's default), but not re-checked with `sshd -T` after a typo in the grep. The simulation 01 run will confirm it (at most 6 failures per connection).
+| Item | Result |
+|---|---|
+| sshd fields from journald | **Confirmed.** Failed logins from journald arrive as 5760 / 5503 with `srcip` 192.168.64.1 and `dstuser` labuser. Rule 2502 ("User missed the password more than once") also fired. Journald stays the log source; no need to fall back to `auth.log`. |
+| Success alert (5715) for labuser | **Intermittent.** It's not a rule problem; see below. |
+| `MaxAuthTries` 6 | **Not yet confirmed.** Simulation 01 will show it: at most 6 failures per connection. |
+
+### Missing 5715: what we know
+
+- **The rules are fine.** `wazuh-logtest` on the exact sequence (PAM failure → `Failed password` → `Accepted password`, same sshd PID) produces 5503, 5760 and 5715.
+- **Events were lost in transit, not missing on the VM.** On 2026-11-06 02:23:06, the VM's own journal had `sshd[2110]: Accepted password for labuser`, but neither 5715 nor 5501 (session opened) reached the manager's alerts. The agent kept sending other journald events afterwards (until 02:39), so the collector didn't stall. Only the burst around the successful login was lost.
+- **With archiving on, the same flow arrived complete.** A retest at 02:56:53–59 with the manager's `logall_json` temporarily on had every line in `archives.json` (Failed, Accepted, session opened, logind New session), and 5715 + 5501 fired.
+- **Lead, not proven:** both misses (2026-11-04 ~07:28, 2026-11-06 02:23) came within minutes of an agent (re)start: a config resync, then a VM boot.
+
+**How to handle it in Phase 2:**
+1. Keep `logall_json` on during simulation runs, so the next miss shows whether the event reached the manager at all. It's a temporary in-container setting on the manager side, not committed. `apply-manager-config.sh` resets it to `no`, because it syncs `ossec.conf` from the repo. `archives.json` sits in the `wazuh_logs` volume and isn't indexed.
+2. After an agent restart or VM boot, wait a few minutes before running a simulation, and note restart times in the simulation write-up.
+3. Always cross-check the endpoint itself:
+
+```bash
+# [VM]
+sudo journalctl -u ssh --since "10 min ago" --no-pager | grep -E 'Accepted|Failed'
+```
+
+**Lesson for the write-up:** no alert doesn't mean nothing happened. A SOC analyst checks the endpoint's own logs before closing an incident as a false alarm.
