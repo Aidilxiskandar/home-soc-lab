@@ -1,0 +1,347 @@
+<!--
+  Home SOC Lab: custom Wazuh rules for the Phase 2 detections.
+  Wazuh manager 4.14.9. Lab ID range: 100100-100199.
+
+  WHERE IT GOES (manager side, done by the coordinator/wazuh branch):
+    /var/ossec/etc/rules/local_rules.xml inside the wazuh.manager container.
+    Check with wazuh-logtest, then restart the manager.
+
+  ID blocks, one per simulation in simulations/ and detections/:
+    100100-100109  01 ssh-brute-force           T1110.001
+    100110-100119  02 local-account-creation    T1136.001 (+ T1098 group change)
+    100120-100129  03 cron-persistence          T1053.003
+    100130-100139  04 sensitive-file-tampering  T1565.001
+    100140-100149  05 sudo-abuse                T1548.003
+
+  Log sources these rules rely on (see configs/endpoint/agent.conf):
+    - sshd / sudo / useradd / usermod / cron / crontab: journald (agent default)
+    - FIM: syscheck with who-data and report_changes on account, sudo and cron paths
+
+  FIM field names used below (as the analysisd syscheck decoder exposes them
+  to rules; in the indexer they appear as syscheck.*):
+    file             -> syscheck.path
+    changed_content  -> syscheck.diff               (report_changes paths only)
+    audit_name       -> syscheck.audit.login_user.name
+    process_name     -> syscheck.audit.process.name
+
+  The original Wazuh example rule 100001 is dropped: it was a demo for 1.1.1.1.
+-->
+
+<!-- ===================================================================== -->
+<!-- 01 ssh-brute-force (T1110.001)                                        -->
+<!-- ===================================================================== -->
+<group name="local,syslog,sshd,soc_lab,">
+
+  <!-- Built-in 5763 needs 8 failures from one IP in 120 s. A slower attacker
+       (for example hydra -t 1 -W 30, or a few tries per minute) stays under it.
+       This catches the slow version: 10 failures from one IP in 15 minutes.
+       It counts 5760 (Failed password), which carries srcip from journald.
+       ignore=900 keeps it to one alert per IP per 15 minutes.
+       Tested behaviour (wazuh-logtest, 2026-11-06): when 5763 fires it uses
+       up the 5760 events counted so far, so in a fast burst 5763 fires on
+       every 8th failure and 100100 does not fire at all. That is by design:
+       5763 covers fast bursts, 100100 covers attacks too slow for 5763. -->
+  <rule id="100100" level="10" frequency="10" timeframe="900" ignore="900">
+    <if_matched_sid>5760</if_matched_sid>
+    <same_source_ip />
+    <description>SOC lab: slow SSH brute force: 10+ failed passwords from $(srcip) in 15 minutes.</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,</group>
+  </rule>
+
+  <!-- A success from an IP that was just flagged for brute force. Built-in
+       40112 does the same off the authentication_failures group; this one is
+       tied to the SSH brute-force rules only, and names the account.
+       It depends on 5715 arriving, which was intermittent in the pre-checks
+       (docs/endpoints.md), so it is a bonus signal, never the only one. -->
+  <rule id="100101" level="13" timeframe="900">
+    <if_sid>5715</if_sid>
+    <if_matched_sid>5763</if_matched_sid>
+    <same_source_ip />
+    <description>SOC lab: SSH login as $(dstuser) from $(srcip) after a brute force from the same IP.</description>
+    <mitre>
+      <id>T1110.001</id>
+      <id>T1078</id>
+    </mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+  <rule id="100102" level="13" timeframe="900">
+    <if_sid>5715</if_sid>
+    <if_matched_sid>100100</if_matched_sid>
+    <same_source_ip />
+    <description>SOC lab: SSH login as $(dstuser) from $(srcip) after a slow brute force from the same IP.</description>
+    <mitre>
+      <id>T1110.001</id>
+      <id>T1078</id>
+    </mitre>
+    <group>authentication_success,</group>
+  </rule>
+
+</group>
+
+<!-- ===================================================================== -->
+<!-- 02 local-account-creation (T1136.001)                                 -->
+<!-- ===================================================================== -->
+<group name="local,syslog,adduser,soc_lab,">
+
+  <!-- A new account with UID 0 is a second root account. Built-in 5902 fires
+       for every new user at level 8; this raises the UID 0 case. -->
+  <rule id="100110" level="12">
+    <if_sid>5902</if_sid>
+    <regex type="pcre2">UID=0,</regex>
+    <description>SOC lab: new local account $(dstuser) created with UID 0 (root-equivalent).</description>
+    <mitre>
+      <id>T1136.001</id>
+      <id>T1078.003</id>
+    </mitre>
+  </rule>
+
+  <!-- usermod -aG sudo logs "add 'X' to group 'sudo'". No built-in rule
+       matches it (2960/2961 only cover gpasswd). Plain group adds are
+       informational; admin groups are raised in 100112. -->
+  <rule id="100111" level="5">
+    <program_name>^usermod$</program_name>
+    <regex type="pcre2">^add '([^']+)' to group '([^']+)'</regex>
+    <description>SOC lab: usermod added a user to a group.</description>
+    <mitre>
+      <id>T1098</id>
+    </mitre>
+    <group>account_changed,</group>
+  </rule>
+
+  <!-- Ubuntu admin groups: sudo and admin give sudo rights; adm, lxd and
+       docker are near-root. The "shadow group" line of the same command
+       is ignored by the ^add ... to group anchor above. -->
+  <rule id="100112" level="12">
+    <if_sid>100111</if_sid>
+    <regex type="pcre2">to group '(sudo|admin|wheel|adm|lxd|docker)'$</regex>
+    <description>SOC lab: user added to a privileged group by usermod.</description>
+    <mitre>
+      <id>T1098</id>
+      <id>T1136.001</id>
+    </mitre>
+    <group>account_changed,</group>
+  </rule>
+
+  <!-- Same for gpasswd -a / adduser X sudo: built-in 2961 is only level 5. -->
+  <rule id="100113" level="12">
+    <if_sid>2960</if_sid>
+    <field name="group" type="pcre2">^(sudo|admin|wheel|adm|lxd|docker)$</field>
+    <description>SOC lab: user $(dstuser) added to privileged group $(group).</description>
+    <mitre>
+      <id>T1098</id>
+      <id>T1136.001</id>
+    </mitre>
+    <group>account_changed,</group>
+  </rule>
+
+  <!-- New account correlated within 10 minutes with a privileged group add.
+       This is the "attacker made himself an admin account" pattern. -->
+  <rule id="100114" level="13" timeframe="600">
+    <if_sid>100112,100113</if_sid>
+    <if_matched_sid>5902</if_matched_sid>
+    <description>SOC lab: new local account created and added to a privileged group within 10 minutes.</description>
+    <mitre>
+      <id>T1136.001</id>
+      <id>T1098</id>
+    </mitre>
+    <group>account_changed,</group>
+  </rule>
+
+  <!-- Same correlation when the new account was UID 0: that event ends as
+       100110, not 5902, so 100114 would not see it. -->
+  <rule id="100115" level="14" timeframe="600">
+    <if_sid>100112,100113</if_sid>
+    <if_matched_sid>100110</if_matched_sid>
+    <description>SOC lab: new UID 0 account created and added to a privileged group within 10 minutes.</description>
+    <mitre>
+      <id>T1136.001</id>
+      <id>T1098</id>
+    </mitre>
+    <group>account_changed,</group>
+  </rule>
+
+</group>
+
+<!-- ===================================================================== -->
+<!-- 03 cron-persistence (T1053.003)                                       -->
+<!-- ===================================================================== -->
+<group name="local,syscheck,cron,soc_lab,">
+
+  <!-- FIM: a cron file was added or changed. Built-in 554 (added, level 5)
+       and 550 (modified, level 7) fire for any file; this names the cron
+       paths watched in agent.conf and raises them. -->
+  <rule id="100120" level="10">
+    <if_sid>550,554</if_sid>
+    <field name="file" type="pcre2">^(/etc/crontab$|/etc/cron\.(d|hourly|daily|weekly|monthly)/|/var/spool/cron/)</field>
+    <description>SOC lab: cron file added or changed: $(file).</description>
+    <mitre>
+      <id>T1053.003</id>
+    </mitre>
+  </rule>
+
+  <!-- The diff (report_changes) shows a download, reverse shell or script
+       from a temp dir. Only on MODIFIED files: Wazuh sends no diff for a
+       newly added file, so a brand-new /etc/cron.d file stops at 100120. -->
+  <rule id="100121" level="13">
+    <if_sid>100120</if_sid>
+    <field name="changed_content" type="pcre2">(?i)(curl|wget|\bnc\b|ncat|socat|/dev/tcp/|bash -i|sh -i|python[0-9.]* -c|perl -e|base64|/tmp/|/dev/shm/)</field>
+    <description>SOC lab: cron change contains a download, shell or temp-dir command: $(file).</description>
+    <mitre>
+      <id>T1053.003</id>
+      <id>T1059.004</id>
+    </mitre>
+  </rule>
+
+</group>
+
+<group name="local,syslog,cron,soc_lab,">
+
+  <!-- Ubuntu's cron daemon logs as "cron", not "crond", so built-in 2830
+       (crond|crontab) never sees it. RELOAD means cron has picked up a new
+       or changed crontab: it backs up the FIM alert from the log side. -->
+  <rule id="100122" level="5">
+    <program_name>^cron$</program_name>
+    <regex type="pcre2">\) RELOAD \(</regex>
+    <description>SOC lab: cron daemon reloaded a changed crontab.</description>
+    <mitre>
+      <id>T1053.003</id>
+    </mitre>
+  </rule>
+
+  <!-- crontab -e / crontab FILE replaced a user's crontab (built-in 2832,
+       level 5). Raise it when the crontab owner is root, i.e. root's own
+       crontab or root editing someone else's. -->
+  <rule id="100123" level="8">
+    <if_sid>2832</if_sid>
+    <regex type="pcre2">^\(root\) REPLACE|REPLACE \(root\)</regex>
+    <description>SOC lab: crontab replaced by or for root.</description>
+    <mitre>
+      <id>T1053.003</id>
+    </mitre>
+  </rule>
+
+</group>
+
+<!-- ===================================================================== -->
+<!-- 04 sensitive-file-tampering (T1565.001)                               -->
+<!-- ===================================================================== -->
+<group name="local,syscheck,soc_lab,">
+
+  <!-- Built-in 550 (level 7) fires for any changed file under /etc, which
+       includes routine package updates. This picks out the files whose
+       change matters most: accounts, PAM, SSH server, hosts. -->
+  <rule id="100130" level="10">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/etc/(passwd|shadow|group|gshadow|hosts|ssh/sshd_config(\.d/.*)?|pam\.d/.*|security/.*|ld\.so\.preload)$</field>
+    <description>SOC lab: sensitive system file added, changed or deleted: $(file).</description>
+    <mitre>
+      <id>T1565.001</id>
+    </mitre>
+  </rule>
+
+  <!-- Same, but the change was NOT made by the package manager or the
+       normal account tools. who-data gives the process. An editor, shell
+       redirect, sed, cp or a script writing to these files is suspicious.
+       python3 is deliberately NOT exempt: during unattended-upgrades the
+       writing process is dpkg (python3 is only its parent, seen live on
+       2026-11-06), so a python script writing here still alerts.
+       adduser/deluser are Perl wrappers that call useradd/userdel, which do
+       the writing. If who-data is down (realtime fallback) there is no
+       process_name and only 100130 fires. -->
+  <rule id="100131" level="12">
+    <if_sid>100130</if_sid>
+    <field name="process_name" negate="yes" type="pcre2">/(dpkg|apt|apt-get|useradd|usermod|userdel|groupadd|groupmod|groupdel|gpasswd|passwd|chpasswd|chage|chfn|chsh|systemd-sysusers)$</field>
+    <description>SOC lab: sensitive file $(file) changed outside package or account tools, by $(process_name) (login user $(audit_name)).</description>
+    <mitre>
+      <id>T1565.001</id>
+    </mitre>
+  </rule>
+
+  <!-- sudoers changed or a new sudoers.d drop-in: direct privilege
+       escalation set-up. Kept separate from 100130 so it maps to the
+       sudo technique too. -->
+  <rule id="100132" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/etc/sudoers(\.d/.*)?$</field>
+    <description>SOC lab: sudoers configuration added, changed or deleted: $(file).</description>
+    <mitre>
+      <id>T1548.003</id>
+      <id>T1565.001</id>
+    </mitre>
+  </rule>
+
+  <!-- sudoers diff grants passwordless or full rights. -->
+  <rule id="100133" level="14">
+    <if_sid>100132</if_sid>
+    <field name="changed_content" type="pcre2">(?i)NOPASSWD|ALL\s*=\s*\(\s*ALL</field>
+    <description>SOC lab: sudoers change grants broad or passwordless sudo: $(file).</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+  </rule>
+
+</group>
+
+<!-- ===================================================================== -->
+<!-- 05 sudo-abuse (T1548.003)                                             -->
+<!-- ===================================================================== -->
+<group name="local,syslog,sudo,soc_lab,">
+
+  <!-- Built-in 5405 "user NOT in sudoers" is only level 5. In this lab only
+       the admin account should ever use sudo, so a denied user is worth a
+       look. Repeats are counted in 100141. -->
+  <rule id="100140" level="8">
+    <if_sid>5405</if_sid>
+    <description>SOC lab: $(srcuser) tried sudo but is not in sudoers (command: $(command)).</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <!-- Repeated denied or failed sudo by the same user in 5 minutes:
+       someone probing for sudo rights, or guessing the password. -->
+  <rule id="100141" level="12" frequency="3" timeframe="300" ignore="300">
+    <if_matched_sid>100140</if_matched_sid>
+    <same_srcuser />
+    <description>SOC lab: repeated sudo attempts by $(srcuser), who is not in sudoers.</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>authentication_failures,</group>
+  </rule>
+
+  <!-- sudo to root that starts an interactive shell or a known
+       shell-escape binary (GTFOBins). Covers 5402 (to root), 5403 (first
+       sudo by a user, fires instead of 5402) and 5407 (to another user). -->
+  <rule id="100142" level="8">
+    <if_sid>5402,5403,5407</if_sid>
+    <field name="command" type="pcre2">^(\S*/)?(bash|sh|dash|zsh|su|python[0-9.]*|perl|ruby|lua|vi|vim|nano|less|more|find|awk|env|tee|cp|dd)(\s|$)</field>
+    <description>SOC lab: sudo by $(srcuser) ran a shell or shell-escape binary: $(command).</description>
+    <mitre>
+      <id>T1548.003</id>
+      <id>T1059.004</id>
+    </mitre>
+  </rule>
+
+  <!-- A successful sudo by an account that is not the lab admin. The admin
+       name is not written in this repo: put it in the CDB list
+       etc/lists/soc-lab-admins (one "name:" per line) on the manager and
+       add <list>etc/lists/soc-lab-admins</list> to ossec.conf <ruleset>.
+       Until that list exists this rule stays commented out. -->
+  <!--
+  <rule id="100143" level="12">
+    <if_sid>5402,5403,5407</if_sid>
+    <list field="srcuser" lookup="not_match_key">etc/lists/soc-lab-admins</list>
+    <description>SOC lab: sudo used by $(srcuser), who is not a lab admin.</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+  </rule>
+  -->
+
+</group>
