@@ -68,7 +68,28 @@ From [`../configs/wazuh-rules/local_rules.xml`](../configs/wazuh-rules/local_rul
 
 Slow test (real time, about 4 minutes): 10 × 5760 and **no 5763**, then **100100 (L10) on the 10th failure** (`srcip` 192.168.64.3), one more 5760 (100100 is in its 15-minute `ignore`), and on `Accepted` **100102 (L13)**. So a slow guesser that 5763 never sees is still caught, and so is its success.
 
-Live result from the simulation run: _to be added after the run with Aidil (alert screenshot in `assets/`)._
+### Live run, 2026-11-06
+
+Ten wrong passwords for `labuser` from the Mac (192.168.64.1), 03:42:17–03:42:55 UTC, about one every 4 s. Earlier single test failures had already come from the same IP at 03:34:43, 03:37:15, 03:39:15 and 03:42:09 (still inside the 15-minute window).
+
+| Fired | Count | Notes |
+|---|---|---|
+| 5760 L5 | 10 | `data.srcip: 192.168.64.1`, `data.dstuser: labuser`, `location: journald` |
+| 5503 L5 | 10 | PAM side, `srcip` from `rhost` |
+| **100100 L10** | 1 | at 03:42:39: "slow SSH brute force: 10+ failed passwords from 192.168.64.1 in 15 minutes" |
+| **5551 L10** | 1 | at 03:42:41: 8 × 5503 in 180 s |
+| 5763 | **0** | see below |
+
+**Why 5763 didn't fire, worked out from the alert timestamps:**
+1. When 100100 fired at 03:42:39, the 15-minute window held 10 failures: the 3 earlier test failures, 03:42:09, and the first 6 of the run. The 2-minute window held only 7, so 5763 (8 in 120 s) wasn't met yet.
+2. 5763 and 100100 both count the same 5760 events. When either one fires, it uses up the events counted so far. The sandbox test showed the same thing the other way round: 21 fast failures gave 5763 twice and 100100 never.
+3. After 03:42:39 only 4 more failures arrived (03:42:43–55), fewer than 8, so 5763 never got its count.
+
+wazuh-logtest fired 5763 because its session had no earlier failures: the 8th rapid line reached 5763's threshold first. Without the 4 stray failures before the run, 5763 would have fired on the run's 8th failure. So the gap is the order the thresholds were reached in, not a live-vs-logtest difference in the rules.
+
+The detection still worked: two independent level-10 alerts (100100 from sshd, 5551 from PAM) within 2 s of each other, with no need for the success event (5715 wasn't part of this run).
+
+To show 5763 itself in the write-up: wait 15 minutes after any SSH failure from the Mac, then send 8 or more failures within 2 minutes.
 
 ## How to verify
 
@@ -113,6 +134,7 @@ and, if `logall_json` is on for the run, `archives.json` on the manager. Record 
 - **Mistyped passwords:** one person mistyping a few times gives 5760 and maybe 2502 (level 10, it fires on a single connection with 2+ failures). It doesn't reach 5763 (8 in 2 minutes). 2502 is the noisiest of the set; if it gets annoying, a child rule at a lower level can be added for `rhost=192.168.64.1` with fewer than 4 failures. Not done now: in this lab every SSH failure is either a test or worth seeing.
 - **All lab traffic has srcip 192.168.64.1.** Every SSH client (admin, attacker, scanner) is the Mac behind UTM's NAT, so `same_source_ip` can't tell the admin from the attacker. In the lab that's fine (one attacker at a time). In a real network, add `same_dstuser`-style splitting or a whitelist of jump hosts via a CDB list.
 - **100100 and admin scripts:** an automation job with a stale password retrying every minute would hit 100100 after ~10 minutes. Fix the job, or exclude its account with a child rule at level 0, never by IP.
+- **5763 and 100100 share one counter.** Both count 5760 from the same IP, and whichever fires first uses up the count, so one burst usually gives only one of them (seen live on 2026-11-06). That's acceptable, because either one is level 10. If both are wanted, 100100 could count the PAM rule 5503 instead (it also has `srcip`). It would then share a counter with 5551 instead, so that change only moves the overlap.
 - **5763 `ignore=60`:** after it fires, one alert per minute per IP at most; a long attack produces a steady trickle, not a flood.
 - **Key-based logins** (`Accepted publickey`) also give 5715. A key login straight after a password brute force from the same IP still triggers 100101, which is correct: it's worth a look.
 - **Not covered:** password spraying (one password, many users) and distributed attacks (many IPs). Spraying against *non-existent* users is caught by 5712; spraying against real users from one IP is caught by 5763 (counts by IP, not by user). Many IPs: out of scope for this lab.
