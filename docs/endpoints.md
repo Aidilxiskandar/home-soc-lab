@@ -94,6 +94,15 @@ sudo timedatectl set-timezone Asia/Kuala_Lumpur
 sudo reboot
 ```
 
+After the reboot, check the clock is synced (see [Clock check](#clock-check-before-every-run) for why this matters):
+
+```bash
+# [VM]
+timedatectl
+```
+
+Expect `System clock synchronized: yes` and `NTP service: active`.
+
 > **Baseline copy:** shut the VM down and use UTM's **Clone** to keep a clean copy (`soc-victim-01-clean`). If a simulation breaks the VM, delete it and clone again.
 
 ## 4. Check the VM can reach the manager
@@ -369,7 +378,7 @@ When checks 1–8 pass (9 only if mac-host is installed), tick "Enrol agents" an
 - **Lead, not proven:** both misses (2026-11-04 ~07:28, 2026-11-06 02:23) came within minutes of an agent (re)start: a config resync, then a VM boot.
 
 **How to handle it in Phase 2:**
-1. Keep `logall_json` on during simulation runs, so the next miss shows whether the event reached the manager at all. It's a temporary in-container setting on the manager side, not committed. `apply-manager-config.sh` resets it to `no`, because it syncs `ossec.conf` from the repo. `archives.json` sits in the `wazuh_logs` volume and isn't indexed.
+1. Keep `logall_json` on during simulation runs, so the next miss shows whether the event reached the manager at all. It's a temporary in-container setting on the manager side, not committed. A plain `apply-manager-config.sh` resets it to `no`, because it syncs `ossec.conf` from the repo; run it with `--archives` to keep it on. `archives.json` sits in the `wazuh_logs` volume and isn't indexed.
 2. After an agent restart or VM boot, wait a few minutes before running a simulation, and note restart times in the simulation write-up.
 3. Always cross-check the endpoint itself:
 
@@ -379,3 +388,29 @@ sudo journalctl -u ssh --since "10 min ago" --no-pager | grep -E 'Accepted|Faile
 ```
 
 **Lesson for the write-up:** no alert doesn't mean nothing happened. A SOC analyst checks the endpoint's own logs before closing an incident as a false alarm.
+
+## Clock check before every run
+
+**Found in simulation 05 (2026-11):** the VM's clock was about 21 minutes slow. `systemd-timesyncd` had been timing out against `ntp.ubuntu.com` since ~01:50 and only synced at 02:29. Early events then carried one time in `full_log` (the VM's clock) and another in the alert timestamp (the manager's clock), which split the incident timeline.
+
+Before each simulation:
+
+```bash
+# [VM]
+timedatectl
+```
+
+You need `System clock synchronized: yes` and `NTP service: active`. If it says `no`, or the time is visibly off from the Mac:
+
+```bash
+# [VM]
+sudo systemctl restart systemd-timesyncd
+timedatectl timesync-status
+journalctl -u systemd-timesyncd -n 20 --no-pager
+```
+
+Wait until `timedatectl` shows `synchronized: yes` before starting. `timesync-status` should show a server address and a small offset. If the journal keeps showing timeouts, the VM can't reach NTP (UDP 123) through UTM's NAT. Check the VM has internet access (`ping -c1 ntp.ubuntu.com`), then try again.
+
+A VM clock often falls behind after the Mac sleeps with the VM running, so do this check after every wake-up, not just after a boot (likely cause, not proven).
+
+**Analyst rule:** build timelines from the Wazuh alert `timestamp` (manager clock), not the time inside `full_log` (endpoint clock). Note any drift you find in the incident report.
