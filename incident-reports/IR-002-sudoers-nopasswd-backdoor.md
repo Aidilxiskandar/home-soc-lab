@@ -1,6 +1,6 @@
 # IR-002: Sudoers backdoor granting passwordless root
 
-> Lab exercise written as a SOC incident report. The "attacker" and the "analyst" are the same person; all activity is from simulation 04 on an isolated lab host. Times are the Wazuh **alert** timestamps (UTC); in this run the endpoint log time matched within 2 seconds.
+> Lab exercise written as a SOC incident report. The "attacker" and the "analyst" are the same person; all activity is from simulation 04 on an isolated lab host. Times are the Wazuh **alert** timestamps (UTC), which the manager sets. The attack steps (01:42–01:44) match the endpoint log within 2 seconds; the cleanup step later fell inside a clock-skew window (see that row).
 
 | Field | Value |
 |---|---|
@@ -22,10 +22,10 @@ Wazuh raised a level-14 alert (rule 100133) when a sudoers drop-in file, `/etc/s
 | 01:43:46 | **100133 (14)** | same file **modified** by `tee -a`; diff: `1a2 > labuser ALL=(ALL) NOPASSWD: ALL` |
 | 01:44:12 | 100132 (12) | `chmod 440` on the file — permission change, no content change |
 | 01:44:24 | 5402 (3) | `sudo visudo -c` (syntax check, read-only) |
-| 02:21:29 | 100132 (12) | Cleanup — file **deleted** (`rm`) |
+| 02:21:29 | 100132 (12) | Cleanup — file **deleted** (`rm`). (VM clock was ~21 min slow here; the alert time shown is the manager's.) |
 
 ## Analysis
-**What happened.** A drop-in was planted in `/etc/sudoers.d/`, which `sudo` reads in addition to `/etc/sudoers`. The planted rule gives `labuser` the right to run any command as root **without a password**, turning a low-privilege account into a silent root path. The `chmod 440` afterward sets the standard sudoers permission so `sudo` accepts the file.
+**What happened.** A drop-in was planted in `/etc/sudoers.d/`, which `sudo` reads in addition to `/etc/sudoers`. The planted rule gives `labuser` the right to run any command as root **without a password**, turning a low-privilege account into a silent root path. The `chmod 440` sets the conventional sudoers mode, but `sudo` already honoured the root-owned `0644` file that `tee` created — so the grant was effective from **01:43:46**, before the chmod.
 
 **How it was detected.** File-integrity monitoring watches `/etc/sudoers` and `/etc/sudoers.d/` with who-data (recording the user behind the change). Custom rule 100132 (level 12) fires on any change to these paths; custom rule 100133 (level 14) is a child that fires when the change's **content diff** contains broad/passwordless grants (`NOPASSWD`, `ALL=(ALL`). The level-14 alert included the literal offending line, so the analyst sees the granted privilege without opening the file.
 

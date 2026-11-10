@@ -13,7 +13,7 @@
 | Analyst | `<admin>` |
 
 ## Summary
-Wazuh raised a level-13 alert (rule 100114) when a newly created local account, `eviluser`, was added to the `sudo` group within ten minutes of being created on `soc-victim-01`. Investigation found a second, more serious artifact from the same session: a UID-0 account named `backdoor` — a second root identity. Both accounts were created by the host's own administrator account via `sudo`. The rogue accounts were removed; the host now shows only the expected UID-0 and sudo members. No evidence of use of either account was found.
+Wazuh raised a level-13 alert (rule 100114) when a newly created local account, `eviluser`, was added to the `sudo` group within ten minutes of being created on `soc-victim-01`. Investigation found a second, more serious artifact from the same session: a UID-0 account named `backdoor` — a second root identity. Both accounts were created by the host's own administrator account via `sudo`. The rogue accounts were removed, with both deletions confirmed by rule 5903 (`userdel`). No evidence of use of either account was found: the archive holds no session, login, `su` or `sudo` activity by `eviluser` or `backdoor`.
 
 ## Timeline (UTC)
 | Time | Rule (level) | Event |
@@ -56,7 +56,7 @@ sudo journalctl _COMM=useradd _COMM=usermod _COMM=userdel --since today --no-pag
 ## Containment and remediation
 1. Removed `eviluser` (`userdel -r`).
 2. Removed the UID-0 `backdoor` account — a plain `userdel` **refused** because a UID-0 account counts as the owner of running root processes (including PID 1); `userdel -f` was required.
-3. Verified only `root` holds UID 0 and only the admin is in the `sudo` group.
+3. Confirmed both accounts were removed via their `userdel` (rule 5903). Recommended on-host verification (to run after cleanup): `awk -F: '$3==0' /etc/passwd` should show only `root`, and `getent group sudo` should show only the admin.
 4. Deleted the `.bak` files left by `sed -i.bak` — `/etc/shadow.bak` was a copy of the password hashes.
 
 ## Lessons learned

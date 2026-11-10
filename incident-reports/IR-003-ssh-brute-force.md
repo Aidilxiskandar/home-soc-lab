@@ -33,7 +33,7 @@ Wazuh raised a level-10 brute-force alert (custom rule 100100) after ten failed 
 
 **Why the built-in burst rule (5763) did not fire.** 5763 (8 failures in 120 s) and 100100 (10 in 15 min) **count the same failed-login events**, and whichever reaches its threshold first consumes the events counted so far. Four isolated failures already sat in 100100's 15-minute window, so 100100 hit 10 at the run's sixth failure and fired first; only four more failures followed — short of 5763's eight. In isolated rule-testing (no prior failures) 5763 fires on the eighth attempt. **This was the ordering of two overlapping counters, not a rule defect** — and the attack was detected regardless, which is the point of running more than one rule.
 
-**Outcome.** No rule 5715 (successful authentication) appeared for this source, and the on-host journal showed no `Accepted password`. The brute force was unsuccessful.
+**Outcome.** No rule 5715 (successful authentication) appeared for this source, and the manager's raw-event archive holds no `Accepted` line for this window (only `Failed password` and `Connection closed`). The brute force was unsuccessful; the on-host journal check below is the final confirming step an analyst should run.
 
 ## Detection context
 Triage query (Threat Hunting):
