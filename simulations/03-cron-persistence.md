@@ -25,10 +25,10 @@ File-integrity alerts on the cron paths; a higher-severity alert when a cron cha
 | Rule | Level | Path | Note |
 |---|---|---|---|
 | **100120** | **10** | /etc/cron.d/soc-lab-persist, /var/spool/cron/crontabs/root | custom: cron file added or changed |
-| **100121** | **13** | /etc/cron.d/soc-lab-persist | custom: cron change contains download/shell content (`curl\|bash`, `base64`) — fired on the **modify**, since a new file carries no diff |
+| **100121** | **13** | /etc/cron.d/soc-lab-persist | custom: cron change with suspicious content — matched `/tmp/` and `base64` in the **diff of the appended line**. The `curl \| bash` line was in the newly created file, which carries no diff, so only the later `tee -a` modify produced a diff to inspect. |
 | 2833 | 8 | — | built-in: root's crontab entry changed |
 
-Archive showed the planted jobs **executed** a minute later (`CRON (root) CMD (curl ... | bash)`), giving a detection-then-execution timeline. `alert_new_files=yes` is set, so the new cron file was not silently missed.
+Archive showed the planted job **executed 8 seconds after it was detected** (file detected 01:25:53, first run 01:26:01), giving a tight detection-then-execution timeline. `alert_new_files=yes` is set, so the new cron file was not silently missed.
 
 > Rule 100122 was originally written to match cron `RELOAD` log lines — which Ubuntu 24.04's cron does not emit at its default log level, so it could never fire. It was rewritten to alert on cron **job executions** containing the same suspicious keywords. The live run above predates that fix (tested in a sandbox); see the detection doc.
 

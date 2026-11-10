@@ -11,7 +11,9 @@ Edit security-critical files directly — the account database (`/etc/passwd`, `
 ```bash
 # [VM] as <admin>, via sudo
 
-# (a) direct edit of the account database with sed (here, removing the UID-0 backdoor from sim 02)
+# (a) direct edit of the account database with sed
+#     (run as a final check after the sim 02 cleanup; backdoor was already gone via `userdel -f`,
+#      so the content was unchanged — but sed -i still rewrites the files)
 sudo sed -i.bak '/^backdoor:/d' /etc/passwd /etc/shadow
 
 # (b) plant a sudoers backdoor granting labuser passwordless root
@@ -27,7 +29,9 @@ FIM alerts on the account/sudoers files; a higher-severity alert when the writin
 ## Result (live, 2026-11-10)
 | Rule | Level | Detail |
 |---|---|---|
-| **100131** | **12** | /etc/passwd and /etc/shadow modified by `/usr/bin/sed` (non-package tool) — fired ×4 (2 files × 2 `sed -i` rewrites) |
+| **100131** | **12** | /etc/passwd and /etc/shadow "modified" by `/usr/bin/sed` (non-package tool) — fired ×4 (2 files × 2 `sed -i` rewrites) |
+
+> 100131 fires on a **rewrite even when the content is unchanged** — here the backdoor line was already gone, so nothing actually changed, yet `sed -i` replaced the files. Tell a real edit from a no-op rewrite by `changed_attributes`: inode/mtime only means a rewrite with no content change, while size/hash changes mean the contents were actually edited.
 | **100132** | **12** | /etc/sudoers.d/99-soc-lab added, and again on the `chmod` (permission-only change) |
 | **100133** | **14** | sudoers change grants broad/passwordless rights — diff captured the exact line: `> labuser ALL=(ALL) NOPASSWD: ALL` |
 
