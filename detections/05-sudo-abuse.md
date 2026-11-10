@@ -85,7 +85,25 @@ From [`../configs/wazuh-rules/local_rules.xml`](../configs/wazuh-rules/local_rul
 
 Sudoers changes (100132 / 100133) were tested with synthetic FIM events: see [04](04-sensitive-file-tampering.md#testing).
 
-Live result from the simulation run: _to be added after the run with Aidil._
+### Live run, 2026-11-10
+
+Before the run, the sudoers drop-in from simulation 04 was removed (100132 L12, `/etc/sudoers.d/99-soc-lab` deleted, 02:21:29), and `sudo -l -U labuser` reported "not allowed to run sudo". `labuser` typed the **correct** password each time, so sudo got as far as the sudoers check. Times are manager (alert) time, UTC.
+
+| Time | Alert | Who | `data.command` | Notes |
+|---|---|---|---|---|
+| 02:25:45 | **100140 L8** | `labuser` → root, pts/1 | `/usr/bin/id` | first attempt, on its own |
+| 02:26:15 | **100142 L8** | `<admin>` → root, pts/0 | `/usr/bin/bash -c id` | root shell through sudo. 5501/5502 session open/close at the same time |
+| 02:40:11 | 100140 L8 | `labuser` | `/usr/bin/id` | |
+| 02:40:23 | 100140 L8 | `labuser` | `/usr/bin/id` | |
+| 02:40:29 | **100141 L12** | `labuser` | `/usr/bin/id` | 3rd denial in 5 minutes: "repeated sudo attempts by labuser, who is not in sudoers" |
+
+Shown live:
+- **100141 counted only the three denials at 02:40.** The one at 02:25:45 was 14 minutes earlier, outside the 5-minute window. The third denial shows up as 100141 instead of 100140, the same way 100114 took the place of 100112 in [02](02-local-account-creation.md): when the frequency rule fires, it is the alert for that event.
+- **No 5401/5404**, because the password was right. Those rules cover the other branch (a wrong password), tested with logtest above.
+- **100142 matched `bash -c id`**: the regex only checks that the command starts with a shell, so arguments don't matter. `sudo -i` would log `/bin/bash` and match the same way.
+- The archive holds four `NOT in sudoers` lines (sudo PIDs 8605, 8705, 8711, 8713). If a fifth attempt was made, sudo didn't log it, for example because it was cancelled at the password prompt.
+
+**VM clock was 21 minutes slow.** The first two events carry VM times of 02:04:15 and 02:04:44 in `full_log`, while the manager received them at 02:25:45 and 02:26:15. systemd-timesyncd on the VM had been timing out against ntp.ubuntu.com since about 01:50, and it only reached a time server at 02:29:03 (manager time). After that, the 02:40 events match to the second. For the timeline, use the alert `timestamp` (manager receive time) rather than the syslog time inside `full_log`, and check `systemd-timesyncd` lines when the two differ by more than a few seconds.
 
 ## How to verify
 
