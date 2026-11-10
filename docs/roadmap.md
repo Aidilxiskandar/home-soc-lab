@@ -27,12 +27,13 @@ Five simulations, each mapped to MITRE ATT&CK, detected live with 20 custom rule
 - [x] Write up the `simulations/` folder (attacker steps + live results, 01-05)
 - Still to add: dashboard screenshots of 100133 (sudoers NOPASSWD) and 100114 (account escalation)
 
-## Phase 3: Triage and report (Mar–Apr 2027)
+## Phase 3: Triage and report (done 10 Nov 2026)
 Runs alongside TryHackMe SOC Level 1 / SAL1 study.
-- [ ] Write custom Wazuh rules and tune out noisy alerts
-- [ ] Build a dashboard of key alerts
-- [ ] Write 3 SOC-style incident reports from lab alerts
-- **Deliverable:** incident reports + tuning notes
+- [x] Write custom Wazuh rules and tune out noisy alerts (20 custom rules; lock-file FIM ignore; journald-only auth)
+- [ ] Build a dashboard of key alerts (optional; the README embeds two key alert screenshots)
+- [x] Write 3 SOC-style incident reports from lab alerts (IR-001 account escalation, IR-002 sudoers backdoor, IR-003 brute force)
+- **Deliverable:** incident reports + tuning notes ✅
+- Open tuning decision: extend rule 100120 to also catch cron-file deletions (currently a delete only logs at L7)
 
 ## Phase 4: Respond and apply (Gap year, 2027)
 - [ ] Automated response (Wazuh active response, for example blocking a brute-forcing IP)

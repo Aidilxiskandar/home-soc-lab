@@ -2,7 +2,7 @@
 
 A self-built Security Operations Centre (SOC) lab running on a single laptop. I use it to practise the full blue-team loop: **collect logs → simulate attacks → detect → triage → report**.
 
-> Status: ✅ Phases 1–2 complete: SIEM deployed, and all five attack scenarios detected live. Next: Phase 3, incident reports. See the [roadmap](docs/roadmap.md).
+> Status: ✅ Phases 1–3 complete: SIEM deployed, five scenarios detected live, and three SOC incident reports written. See the [roadmap](docs/roadmap.md) and [incident-reports/](incident-reports/).
 
 ## Why this project
 
