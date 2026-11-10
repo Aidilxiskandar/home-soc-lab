@@ -24,7 +24,8 @@ Five simulations, each mapped to MITRE ATT&CK, detected live with 20 custom rule
 - [x] Sensitive file changed, FIM (T1565.001) — 100131, 100133 (NOPASSWD sudoers)
 - [x] Suspicious sudo / privilege escalation (T1548.003) — 100140/100141/100142
 - **Deliverable:** detection coverage table filled in on the README ✅
-- Still to add: write up the `simulations/` folder from the commands used; dashboard screenshots of 100133/100114
+- [x] Write up the `simulations/` folder (attacker steps + live results, 01-05)
+- Still to add: dashboard screenshots of 100133 (sudoers NOPASSWD) and 100114 (account escalation)
 
 ## Phase 3: Triage and report (Mar–Apr 2027)
 Runs alongside TryHackMe SOC Level 1 / SAL1 study.

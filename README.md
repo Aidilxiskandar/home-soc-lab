@@ -76,6 +76,8 @@ All five scenarios were **detected live** against the lab VM. Of the 20 active c
 | 04 | Sensitive file tampering | T1565.001 | 100131, 100132, **100133** | 14 | [doc](detections/04-sensitive-file-tampering.md) |
 | 05 | Sudo abuse | T1548.003 | 100140, 100142, **100141** | 12 | [doc](detections/05-sudo-abuse.md) |
 
+Attacker steps for each scenario are in [`simulations/`](simulations/); the matching detection logic and tuning are in [`detections/`](detections/).
+
 Running the attacks for real surfaced things a paper exercise would miss: a built-in burst rule (5763) that didn't fire because it shared a counter with a custom rule; a custom rule (100122) that was dead on Ubuntu 24.04 until rewritten; and a ~21-minute endpoint clock skew that split event timelines between the raw log and the alert.
 
 ## Disclaimer
