@@ -78,6 +78,16 @@ All five scenarios were **detected live** against the lab VM. Of the 20 active c
 
 Attacker steps for each scenario are in [`simulations/`](simulations/); the matching detection logic and tuning are in [`detections/`](detections/).
 
+### Example alerts
+
+A level-14 alert on a sudoers backdoor — the alert's diff captured the exact planted line (`labuser ALL=(ALL) NOPASSWD: ALL`):
+
+![Wazuh alert 100133 — sudoers NOPASSWD backdoor, level 14](assets/alert-100133-sudoers-nopasswd.png)
+
+A level-13 correlation alert — a brand-new account added to the `sudo` group within 10 minutes of being created:
+
+![Wazuh alert 100114 — new account added to a privileged group, level 13](assets/alert-100114-account-escalation.png)
+
 Running the attacks for real surfaced things a paper exercise would miss: a built-in burst rule (5763) that didn't fire because it shared a counter with a custom rule; a custom rule (100122) that was dead on Ubuntu 24.04 until rewritten; and a ~21-minute endpoint clock skew that split event timelines between the raw log and the alert.
 
 ## Disclaimer
