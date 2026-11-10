@@ -66,13 +66,13 @@ Details and design decisions: [docs/architecture.md](docs/architecture.md) and [
 
 ## Detection coverage
 
-All five scenarios were **detected live** against the lab VM. Of the 20 active custom rules, **12 fired live**; the rest are tested (via `wazuh-logtest` and a sandbox) but need conditions that didn't arise in these runs, or were superseded by a higher-severity correlation rule.
+All five scenarios were **detected live** against the lab VM. Of the 20 active custom rules, **13 fired live**; the rest are tested (via `wazuh-logtest` and a sandbox) but need conditions that didn't arise in these runs, or were superseded by a higher-severity correlation rule.
 
 | # | Scenario | ATT&CK ID | Key rules that fired (live) | Top severity | Detection |
 |---|---|---|---|---|---|
 | 01 | SSH brute force | T1110.001 | 5760, 5503, 5551, **100100** | 10 | [doc](detections/01-ssh-brute-force.md) |
 | 02 | Local account creation | T1136.001 | 5902, 5901, 100130, 100110, **100114** | 13 | [doc](detections/02-local-account-creation.md) |
-| 03 | Cron persistence | T1053.003 | 100120, 2833, **100121** | 13 | [doc](detections/03-cron-persistence.md) |
+| 03 | Cron persistence | T1053.003 | 100120, 100122, 2833, **100121** | 13 | [doc](detections/03-cron-persistence.md) |
 | 04 | Sensitive file tampering | T1565.001 | 100131, 100132, **100133** | 14 | [doc](detections/04-sensitive-file-tampering.md) |
 | 05 | Sudo abuse | T1548.003 | 100140, 100142, **100141** | 12 | [doc](detections/05-sudo-abuse.md) |
 
@@ -88,7 +88,7 @@ A level-13 correlation alert — a brand-new account added to the `sudo` group w
 
 ![Wazuh alert 100114 — new account added to a privileged group, level 13](assets/alert-100114-account-escalation.png)
 
-Running the attacks for real surfaced things a paper exercise would miss: a built-in burst rule (5763) that didn't fire because it shared a counter with a custom rule; a custom rule (100122) that was dead on Ubuntu 24.04 until rewritten; and a ~21-minute endpoint clock skew that split event timelines between the raw log and the alert.
+Running the attacks for real surfaced things a paper exercise would miss: a built-in burst rule (5763) that didn't fire because it shared a counter with a custom rule; a custom rule (100122) that was dead on Ubuntu 24.04 until rewritten (now confirmed firing live); and a ~21-minute endpoint clock skew that split event timelines between the raw log and the alert.
 
 ## Disclaimer
 

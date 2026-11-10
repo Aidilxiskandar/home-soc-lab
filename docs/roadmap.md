@@ -17,7 +17,7 @@ Paced for about 4–5 hours a week. Each phase ends with something finished and 
 - **Deliverable:** working dashboard screenshot + setup guide anyone can follow ✅
 
 ## Phase 2: Attack and detect (done 10 Nov 2026)
-Five simulations, each mapped to MITRE ATT&CK, detected live with 20 custom rules (12 fired live):
+Five simulations, each mapped to MITRE ATT&CK, detected live with 20 custom rules (13 fired live):
 - [x] SSH brute force (T1110.001) — 100100 + 5551
 - [x] New local account created (T1136.001) — 100114 (sudo), 100110 (UID 0)
 - [x] Persistence via cron job (T1053.003) — 100120, 100121 (suspicious content)
