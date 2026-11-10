@@ -2,7 +2,7 @@
 
 A self-built Security Operations Centre (SOC) lab running on a single laptop. I use it to practise the full blue-team loop: **collect logs → simulate attacks → detect → triage → report**.
 
-> Status: ✅ Phase 1 complete: SIEM deployed and the first endpoint is sending logs. Next: Phase 2, attack and detect. See the [roadmap](docs/roadmap.md).
+> Status: ✅ Phases 1–2 complete: SIEM deployed, and all five attack scenarios detected live. Next: Phase 3, incident reports. See the [roadmap](docs/roadmap.md).
 
 ## Why this project
 
@@ -66,9 +66,17 @@ Details and design decisions: [docs/architecture.md](docs/architecture.md) and [
 
 ## Detection coverage
 
-| # | Technique | ATT&CK ID | Simulation | Detection | Report |
+All five scenarios were **detected live** against the lab VM. Of the 20 active custom rules, **12 fired live**; the rest are tested (via `wazuh-logtest` and a sandbox) but need conditions that didn't arise in these runs, or were superseded by a higher-severity correlation rule.
+
+| # | Scenario | ATT&CK ID | Key rules that fired (live) | Top severity | Detection |
 |---|---|---|---|---|---|
-| — | _Coming in Phase 2_ | | | | |
+| 01 | SSH brute force | T1110.001 | 5760, 5503, 5551, **100100** | 10 | [doc](detections/01-ssh-brute-force.md) |
+| 02 | Local account creation | T1136.001 | 5902, 5901, 100130, 100110, **100114** | 13 | [doc](detections/02-local-account-creation.md) |
+| 03 | Cron persistence | T1053.003 | 100120, 2833, **100121** | 13 | [doc](detections/03-cron-persistence.md) |
+| 04 | Sensitive file tampering | T1565.001 | 100131, 100132, **100133** | 14 | [doc](detections/04-sensitive-file-tampering.md) |
+| 05 | Sudo abuse | T1548.003 | 100140, 100142, **100141** | 12 | [doc](detections/05-sudo-abuse.md) |
+
+Running the attacks for real surfaced things a paper exercise would miss: a built-in burst rule (5763) that didn't fire because it shared a counter with a custom rule; a custom rule (100122) that was dead on Ubuntu 24.04 until rewritten; and a ~21-minute endpoint clock skew that split event timelines between the raw log and the alert.
 
 ## Disclaimer
 

@@ -16,14 +16,15 @@ Paced for about 4–5 hours a week. Each phase ends with something finished and 
 - [x] Write the setup guide: [`docs/setup.md`](setup.md)
 - **Deliverable:** working dashboard screenshot + setup guide anyone can follow ✅
 
-## Phase 2: Attack and detect (Jan–Feb 2027)
-Five simulations, each mapped to MITRE ATT&CK, with a detection and evidence:
-- [ ] SSH brute force (T1110)
-- [ ] New local account created (T1136)
-- [ ] Persistence via cron job (T1053.003)
-- [ ] Sensitive file changed, using file integrity monitoring (T1565)
-- [ ] Suspicious sudo / privilege escalation attempt (T1548)
-- **Deliverable:** detection coverage table filled in on the README
+## Phase 2: Attack and detect (done 10 Nov 2026)
+Five simulations, each mapped to MITRE ATT&CK, detected live with 20 custom rules (12 fired live):
+- [x] SSH brute force (T1110.001) — 100100 + 5551
+- [x] New local account created (T1136.001) — 100114 (sudo), 100110 (UID 0)
+- [x] Persistence via cron job (T1053.003) — 100120, 100121 (suspicious content)
+- [x] Sensitive file changed, FIM (T1565.001) — 100131, 100133 (NOPASSWD sudoers)
+- [x] Suspicious sudo / privilege escalation (T1548.003) — 100140/100141/100142
+- **Deliverable:** detection coverage table filled in on the README ✅
+- Still to add: write up the `simulations/` folder from the commands used; dashboard screenshots of 100133/100114
 
 ## Phase 3: Triage and report (Mar–Apr 2027)
 Runs alongside TryHackMe SOC Level 1 / SAL1 study.
