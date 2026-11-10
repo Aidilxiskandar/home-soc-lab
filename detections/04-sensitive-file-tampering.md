@@ -63,7 +63,26 @@ FIM field names in rules: `file` = `syscheck.path`, `process_name` = `syscheck.a
 | `/etc/passwd` modified by `/usr/bin/python3.12` (script, not dpkg) | **100131 L12** |
 | `/etc/hosts` modified, `mode: realtime`, no who-data | 100130 L10 (no process, so 100131 can't decide) |
 
-Live result from the simulation run: _to be added after the run with Aidil._
+### Live run, 2026-11-10
+
+All by the admin through sudo. Times are UTC, process and login user from who-data.
+
+| Time | Alert | File, event | Process | Notes |
+|---|---|---|---|---|
+| 01:33:38 | **100131 L12** ×2 | `/etc/passwd`, `/etc/shadow` modified | `/usr/bin/sed` | `sed -i.bak '/^backdoor:/d' …` during simulation 02 cleanup. `changed_attributes: inode, mtime` only: the account was already gone (`userdel -f` at 01:30:07), so the content stayed the same, but `sed -i` replaces the file, and FIM reports that |
+| 01:34:26 | 100131 L12 ×2 | same | `/usr/bin/sed` | same command run again, same result |
+| 01:42:24 | **100132 L12** | `/etc/sudoers.d/99-soc-lab` added | `/usr/bin/tee` | new drop-in. No diff, because it's a new file, so 100133 can't fire on this step |
+| 01:43:46 | **100133 L14** | same file modified | `/usr/bin/tee` | `tee -a` append. `syscheck.diff`: `1a2 > labuser ALL=(ALL) NOPASSWD: ALL`. Highest alert of the run, and it shows the exact line that was added |
+| 01:44:12 | 100132 L12 | same file modified | `/usr/bin/chmod` | `chmod 440`. `changed_attributes: permission`, `perm_after: r--r-----`, diff "No content changes were found" |
+
+Shown live:
+- **100131 fires on a rewrite even when the content doesn't change.** For a SOC that's the right call: `sed -i` on `/etc/shadow` is unusual whatever it ended up changing. The analyst can tell a rewrite apart from a real edit by `changed_attributes`: inode/mtime only, versus size and hashes.
+- **Permission-only changes on sudoers alert too** (100132). Making a sudoers file group- or world-writable would be a real attack step, and so would the opposite. The diff says "No content changes", and `perm_after` shows the new mode.
+- **A new drop-in followed by an append** gave 100132 then 100133, as predicted. An attacker who writes the whole `NOPASSWD` line into a **new** file in one go gets 100132 (L12) only. The line then has to be read on the VM: `sudo cat /etc/sudoers.d/<file>`.
+
+**Side effect to clean up:** `sed -i.bak` left `/etc/passwd.bak` and **`/etc/shadow.bak`** on the VM. The second is a copy of the password hashes outside the file Wazuh treats as sensitive (100130 doesn't match `.bak`, and there's no diff, because only the `/etc` wide net covers it). Delete both after the run. In a real incident, an attacker's `shadow.bak`, `shadow~` or `shadow.orig` would be worth hunting for.
+
+Not run live: an `/etc/hosts` or `sshd_config` edit (covered by the sandbox test above).
 
 ## How to verify
 
@@ -86,6 +105,7 @@ Expected for "append a line to `/etc/hosts` with `sudo tee -a`":
 ## False positives and tuning
 
 - **Package upgrades** touching `/etc/pam.d/*`, `/etc/ssh/sshd_config` or `/etc/security/*`: 100130 L10 with `process.name: /usr/bin/dpkg`, never 100131. Expected after `apt upgrade`; check the time against `/var/log/dpkg.log` (rules 2902/2904 fire at the same time).
+- **Backup copies** (`shadow.bak`, `passwd-`, editor `~` files) aren't in 100130's list. `*.swp` and `~` are ignored by agent.conf. A `.bak` or `.orig` appears as plain 554 (L5). Not raised, so as not to double the alerts on every `useradd` (which writes `/etc/shadow-`), but worth searching for during an investigation: `syscheck.path:/etc/shadow*`.
 - **Admin editing by hand** (`sudo vim /etc/hosts`) gives 100131 L12. That's the point: hand edits of these files should be rare and explainable. In the lab, write the reason in the simulation notes.
 - **Netplan / cloud-init / systemd-resolved** can rewrite `/etc/hosts` on some installs. Not seen on soc-victim-01 so far. If it happens, exempt the exact process for `/etc/hosts` only in a child rule.
 - **`/etc/shadow` on password change** is expected from `passwd` (exempt), and 5555 fires at the same time.
