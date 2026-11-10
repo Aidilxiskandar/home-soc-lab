@@ -91,7 +91,7 @@ FIM on `/etc/passwd` is covered by detection 04 (rule 100130 / 100131), tested t
 
 ### Live run, 2026-11-10
 
-Run by the admin through sudo, about 01:18 UTC: `useradd -m -s /bin/bash eviluser`, then `usermod -aG sudo eviluser`, then a UID 0 account `backdoor` (`useradd -o -u 0 …`).
+Run by the admin through sudo, about 01:18 UTC (commands confirmed from the sudo `COMMAND` lines): `useradd -m -s /bin/bash eviluser`, then `usermod -aG sudo eviluser`, then `useradd -o -u 0 backdoor`. No `-g` was given, so `backdoor` got its own new group (GID 1003, hence the second 5901); UID 0 is what matters.
 
 | Time (UTC) | Alert | What |
 |---|---|---|
@@ -102,6 +102,7 @@ Run by the admin through sudo, about 01:18 UTC: `useradd -m -s /bin/bash eviluse
 | 01:19:10 | 5901 L8, **100110 L12** | `new user: name=backdoor, UID=0, GID=1003`: second root account |
 | 01:19:10 | 100130 L10 ×4 | FIM on the account files by `useradd` |
 | each step | 5402 L3 | the admin's sudo commands |
+| 01:21:55 | 100130 L10 ×4, **5903 L3** | cleanup `userdel -r eviluser`: FIM on the 4 account files by `/usr/sbin/userdel`, then `delete user 'eviluser'`. The other 10 FIM alerts (lock files, `-` backups, subuid/subgid) were built-in 550/553/554 |
 
 No 100131: every write was by `useradd`/`usermod`, which are exempt, as designed. No 100115: the UID 0 account came *after* the sudo-group add, and nobody was added to a privileged group afterwards.
 
