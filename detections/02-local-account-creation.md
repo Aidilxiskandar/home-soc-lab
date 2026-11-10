@@ -103,6 +103,7 @@ Run by the admin through sudo, about 01:18 UTC (commands confirmed from the sudo
 | 01:19:10 | 100130 L10 ×4 | FIM on the account files by `useradd` |
 | each step | 5402 L3 | the admin's sudo commands |
 | 01:21:55 | 100130 L10 ×4, **5903 L3** | cleanup `userdel -r eviluser`: FIM on the 4 account files by `/usr/sbin/userdel`, then `delete user 'eviluser'`. The other 10 FIM alerts (lock files, `-` backups, subuid/subgid) were built-in 550/553/554 |
+| later | **100131 L12** ×2, no 5903 | cleanup of `backdoor`: `userdel` refused, because an account with UID 0 counts as the owner of root's processes (PID 1). It was removed by editing `/etc/passwd` and `/etc/shadow` with `sed -i`, which FIM saw as a sensitive file changed by `/usr/bin/sed`, not by an account tool (see [04](04-sensitive-file-tampering.md)) |
 
 No 100131: every write was by `useradd`/`usermod`, which are exempt, as designed. No 100115: the UID 0 account came *after* the sudo-group add, and nobody was added to a privileged group afterwards.
 
