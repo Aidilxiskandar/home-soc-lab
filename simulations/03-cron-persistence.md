@@ -30,7 +30,9 @@ File-integrity alerts on the cron paths; a higher-severity alert when a cron cha
 
 Archive showed the planted job **executed 8 seconds after it was detected** (file detected 01:25:53, first run 01:26:01), giving a tight detection-then-execution timeline. `alert_new_files=yes` is set, so the new cron file was not silently missed.
 
-> Rule 100122 was originally written to match cron `RELOAD` log lines — which Ubuntu 24.04's cron does not emit at its default log level, so it could never fire. It was rewritten to alert on cron **job executions** containing the same suspicious keywords. The live run above predates that fix (tested in a sandbox); see the detection doc.
+> Rule 100122 was originally written to match cron `RELOAD` log lines — which Ubuntu 24.04's cron does not emit at its default log level, so it could never fire. It was rewritten to alert on cron **job executions** containing the same suspicious keywords.
+
+**100122 confirmed live (2026-11-10):** a harmless follow-up job `* * * * * root /tmp/soc-lab-noop` fired **100120 L10** (file added) and, when it ran a minute later, **100122 L12** on `CRON (root) CMD (/tmp/soc-lab-noop)` (the `/tmp/` keyword). The job was removed afterward.
 
 ## Cleanup
 ```bash
