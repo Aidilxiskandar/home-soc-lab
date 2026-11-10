@@ -89,7 +89,28 @@ From [`../configs/wazuh-rules/local_rules.xml`](../configs/wazuh-rules/local_rul
 
 FIM on `/etc/passwd` is covered by detection 04 (rule 100130 / 100131), tested there.
 
-Live result from the simulation run: _to be added after the run with Aidil._
+### Live run, 2026-11-10
+
+Run by the admin through sudo, about 01:18 UTC (commands confirmed from the sudo `COMMAND` lines): `useradd -m -s /bin/bash eviluser`, then `usermod -aG sudo eviluser`, then `useradd -o -u 0 backdoor`. No `-g` was given, so `backdoor` got its own new group (GID 1003, hence the second 5901); UID 0 is what matters.
+
+| Time (UTC) | Alert | What |
+|---|---|---|
+| 01:18:22 | 5901 L8, 5902 L8 | `new group: name=eviluser` / `new user: name=eviluser, UID=1002` |
+| 01:18:21 | **100130 L10** ×4 | FIM on `/etc/passwd`, `/etc/shadow`, `/etc/group`, `/etc/gshadow`. `syscheck.audit.process.name: /usr/sbin/useradd`, `login_user.name: <admin>` |
+| 01:18:46 | **100114 L13** | `usermod[2165]: add 'eviluser' to group 'sudo'`: new account plus sudo within 10 minutes |
+| 01:18:45 | 100130 L10 ×2 | FIM on `/etc/group`, `/etc/gshadow` by `/usr/sbin/usermod` |
+| 01:19:10 | 5901 L8, **100110 L12** | `new user: name=backdoor, UID=0, GID=1003`: second root account |
+| 01:19:10 | 100130 L10 ×4 | FIM on the account files by `useradd` |
+| each step | 5402 L3 | the admin's sudo commands |
+| 01:21:55 | 100130 L10 ×4, **5903 L3** | cleanup `userdel -r eviluser`: FIM on the 4 account files by `/usr/sbin/userdel`, then `delete user 'eviluser'`. The other 10 FIM alerts (lock files, `-` backups, subuid/subgid) were built-in 550/553/554 |
+
+No 100131: every write was by `useradd`/`usermod`, which are exempt, as designed. No 100115: the UID 0 account came *after* the sudo-group add, and nobody was added to a privileged group afterwards.
+
+**Why there's no separate 100112 alert:** Wazuh gives each event one alert, from the deepest rule in the chain that matches. 100114 is a child of 100112 (`<if_sid>100112,100113</if_sid>` plus `<if_matched_sid>5902</if_matched_sid>`), so the usermod line went 100111 → 100112 → 100114 and was reported as 100114. 100112 fires on its own only when an *existing* account is added to a privileged group with no new user in the last 10 minutes. The same line in wazuh-logtest without a preceding 5902 gives 100112 L12. The correlation rule takes the place of the single-event rule; nothing is lost, and the alert's `full_log` still holds the usermod line.
+
+**FIM noise seen in the run:** each `useradd` also gave about 15 lower alerts: 554/553 L5/L7 for the `.lock` files (`/etc/passwd.lock`, `/etc/group.lock`, …), 550 L7 for the backup copies (`/etc/passwd-`, `/etc/shadow-`, …) and `/etc/subuid`/`/etc/subgid`, plus 517 L7 "Audit rule removed". The 517 appears because useradd replaces the file with a new one, so the who-data watch is re-created. See tuning below.
+
+Not exercised live (covered by wazuh-logtest above): 100111 (non-privileged group), 100113 (gpasswd), 100115.
 
 ## How to verify
 
@@ -120,4 +141,6 @@ getent group sudo
 - **Legitimate admin work** (adding a real user, installing docker, which creates the `docker` group and may add the admin to it) triggers the same alerts. In the lab that's rare and should be logged in the simulation notes. In production you'd suppress by change-ticket window, not by rule.
 - **Package installs** create system users and groups (`systemd-*`, `_apt`, `tss`, …): they give 5901/5902 with UID < 1000 and `shell=/usr/sbin/nologin`. A child rule at level 3 for `shell=/usr/sbin/nologin` would cut this noise; not added, because an attacker could create a nologin account and change the shell later (5904 would then fire).
 - **100114's 10-minute window** misses an attacker who waits. The building blocks (5902, 100112) still alert separately at 8 and 12.
+- **Lock and backup files (seen live):** about 15 alerts per `useradd` for `*.lock`, `/etc/*-` backups and `subuid`/`subgid`, at level 5–7. The real files (passwd, shadow, group, gshadow) already raise 100130 at level 10, so these add nothing. Suggested endpoint-side fix in `agent.conf`: `<ignore type="sregex">^/etc/[a-z]+\.lock$</ignore>`. The `-` backups can stay: they're a second copy of the evidence, and an attacker editing `/etc/shadow-` directly would be unusual but worth seeing.
+- **517 "Audit rule removed"** follows every passwd/group rewrite (the file is replaced, so the watch is re-added). It's expected and harmless. On its own, without account changes around it, it could mean someone is tampering with auditd.
 - **`adduser` interactive** gives 5904 (chfn, full name) and 5555 as part of normal creation: expected, not separate findings.

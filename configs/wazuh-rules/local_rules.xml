@@ -200,15 +200,21 @@
 
 <group name="local,syslog,cron,soc_lab,">
 
-  <!-- Ubuntu's cron daemon logs as "cron", not "crond", so built-in 2830
-       (crond|crontab) never sees it. RELOAD means cron has picked up a new
-       or changed crontab: it backs up the FIM alert from the log side. -->
-  <rule id="100122" level="5">
-    <program_name>^cron$</program_name>
-    <regex type="pcre2">\) RELOAD \(</regex>
-    <description>SOC lab: cron daemon reloaded a changed crontab.</description>
+  <!-- A cron job RAN a download, shell or temp-dir command. The daemon logs
+       every job start as "CRON[PID]: (user) CMD (command)" in the journal.
+       No built-in rule alerts on these lines (2830 is crond|crontab only).
+       This is execution evidence, separate from the FIM alert that shows the
+       job being planted.
+       (Replaces the first 100122, which matched "RELOAD" lines. Ubuntu 24.04
+       cron doesn't write those at its default log level: none in archives
+       during the 2026-11-10 run, even though the planted jobs ran.) -->
+  <rule id="100122" level="12">
+    <program_name>^CRON$</program_name>
+    <regex type="pcre2">^\(\S+\) CMD \(.*(curl|wget|\bnc\b|ncat|socat|/dev/tcp/|bash -i|sh -i|python[0-9.]* -c|perl -e|base64|/tmp/|/dev/shm/)</regex>
+    <description>SOC lab: cron ran a download, shell or temp-dir command.</description>
     <mitre>
       <id>T1053.003</id>
+      <id>T1059.004</id>
     </mitre>
   </rule>
 
